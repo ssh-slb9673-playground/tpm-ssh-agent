@@ -28,5 +28,13 @@ fn main() -> Result<(), Error> {
     println!("[+] Device ID: {:04x}", tpm_device_id);
     println!("[+] Revision ID: {:01x}", tpm_revision_id);
 
+    let mut cap_read_buf: [u8; 4] = [0; 4];
+    let cap_write_buf: [u8; 1] = [0x30];
+    device.write_read_address(0x2e, &cap_write_buf, &mut cap_read_buf)?;
+    println!(
+        "[+] capabilities = {:02x} {:02x} {:02x} {:02x}",
+        cap_read_buf[3], cap_read_buf[2], cap_read_buf[1], cap_read_buf[0]
+    );
+
     Ok(())
 }
