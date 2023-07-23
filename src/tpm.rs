@@ -1,15 +1,21 @@
 use crate::TpmResult;
 use bitfield_struct::bitfield;
 
-#[derive(Debug)]
-#[allow(non_snake_case)]
+#[bitfield(u32)]
 pub struct TpmStatus {
-    pub burstCount: u16,
-    pub stsValid: bool,
-    pub commandReady: bool,
-    pub dataAvail: bool,
-    pub Expect: bool,
-    pub selfTestDone: bool,
+    _reserverd_0: bool,
+    pub response_retry: bool,
+    pub self_test_done: bool,
+    pub expect: bool,
+    pub data_available: bool,
+    pub tpm_go: bool,
+    pub command_ready: bool,
+    pub status_valid: bool,
+    pub burst_count: u16,
+    pub command_cancel: bool,
+    pub reset_establishment_bit: bool,
+    #[bits(6)]
+    _reserved: u8,
 }
 
 #[bitfield(u8)]
@@ -47,7 +53,7 @@ pub struct TpmInterfaceCaps {
     pub device_address_change: u8,
     pub burst_count_static: bool,
     pub guard_time_repeated_start: bool,
-    pub _reserved: bool,
+    _reserved: bool,
 }
 
 fn u16le(arr: &[u8]) -> u16 {
@@ -106,6 +112,7 @@ impl Tpm {
         self.device.i2c_write(&[0x04, v])?;
         Ok(())
     }
+
     pub fn read_access(&mut self) -> TpmResult<TpmAccess> {
         let mut read_buf = [0u8; 1];
         self.device.i2c_write(&[0x04])?;
@@ -129,15 +136,6 @@ impl Tpm {
         let mut read_sts_buf = [0u8; 4];
         self.device.i2c_write(&[0x18])?;
         self.device.i2c_read(&mut read_sts_buf)?;
-        let sts = u32le(&read_sts_buf);
-        println!("{:08x}", sts);
-        Ok(TpmStatus {
-            burstCount: ((sts >> 8) & 0xffff) as u16,
-            stsValid: 1 == (sts >> 7) & 1,
-            commandReady: 1 == (sts >> 6) & 1,
-            dataAvail: 1 == (sts >> 4) & 1,
-            Expect: 1 == (sts >> 3) & 1,
-            selfTestDone: 1 == (sts >> 2) & 1,
-        })
+        Ok(TpmStatus::from(u32le(&read_sts_buf)))
     }
 }

@@ -3,27 +3,10 @@ use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use std::convert::From;
 use std::fmt;
 
-mod driver;
-mod tpm;
+pub mod driver;
+pub mod tpm;
 
 pub type TpmResult<T> = Result<T, Error>;
-
-#[macro_export]
-macro_rules! bit {
-    ($x:expr, $i:expr) => {
-        (($x >> $i) & 1)
-    };
-    ($x:expr, $i:expr, bool) => {
-        (($x >> $i) & 1) == 1
-    };
-    ($x:expr, $i:expr, $type:ty) => {
-        (($x >> $i) & 1) as $type
-    };
-    ($x:expr, $i:expr, $j:expr, $type:ty) => {
-        assert!($j > 0);
-        (($x >> $i) & ((1 << $j) - 1)) as $type
-    };
-}
 
 #[derive(Debug)]
 pub enum Error {
