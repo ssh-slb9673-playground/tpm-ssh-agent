@@ -1,12 +1,12 @@
-extern crate i2cdev;
-
-use crate::tpm::{I2CTPMAccessor, TPM};
-use i2cdev::core::*;
-use i2cdev::linux::LinuxI2CDevice;
+use crate::tpm::TPM;
+use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use std::convert::From;
 use std::fmt;
 
+mod driver;
 mod tpm;
+
+pub type TPMResult<T> = Result<T, Error>;
 
 #[macro_export]
 macro_rules! bit {
@@ -19,23 +19,15 @@ macro_rules! bit {
     ($x:expr, $i:expr, $type:ty) => {
         (($x >> $i) & 1) as $type
     };
-}
-
-impl I2CTPMAccessor for LinuxI2CDevice {
-    fn i2c_read(&mut self, read_buf: &mut [u8]) -> TPMResult<()> {
-        self.read(read_buf)?;
-        Ok(())
-    }
-
-    fn i2c_write(&mut self, write_buf: &[u8]) -> TPMResult<()> {
-        self.write(write_buf)?;
-        Ok(())
-    }
+    ($x:expr, $i:expr, $j:expr, $type:ty) => {
+        assert!($j > 0);
+        (($x >> $i) & ((1 << $j) - 1)) as $type
+    };
 }
 
 #[derive(Debug)]
 pub enum Error {
-    LinuxI2CError(i2cdev::linux::LinuxI2CError),
+    LinuxI2CError(LinuxI2CError),
     Unknown,
 }
 
@@ -49,8 +41,6 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
-
-pub type TPMResult<T> = Result<T, Error>;
 
 impl From<i2cdev::linux::LinuxI2CError> for Error {
     fn from(err: i2cdev::linux::LinuxI2CError) -> Error {
