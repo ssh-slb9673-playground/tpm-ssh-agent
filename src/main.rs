@@ -1,4 +1,4 @@
-use crate::tpm::{Tpm, TpmAccess};
+use crate::tpm::{Tpm, TpmStatus};
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use std::convert::From;
 use std::fmt;
@@ -12,6 +12,7 @@ pub type TpmResult<T> = Result<T, Error>;
 pub enum Error {
     LinuxI2CError(LinuxI2CError),
     Unknown,
+    TpmBusy,
 }
 
 impl fmt::Display for Error {
@@ -19,6 +20,7 @@ impl fmt::Display for Error {
         match &self {
             Error::LinuxI2CError(e) => write!(f, "{}", e),
             Error::Unknown => write!(f, "Unknown"),
+            Error::TpmBusy => write!(f, "Busy"),
         }
     }
 }
@@ -118,16 +120,26 @@ fn main() -> TpmResult<()> {
     assert_eq!(tpm_device_id, &0x001c);
     assert_eq!(tpm_revision_id, &0x16);
     print_info(&mut tpm)?;
-    if !&tpm.read_access()?.active_locality() {
-        let _ = &tpm.write_access(&TpmAccess::new().with_request_use(true))?;
-        let ac = &tpm.read_access()?;
-        if !ac.active_locality() {
-            println!("[+] Can't get locality control");
-            return Ok(());
-        }
+    println!("[+] Change locality to 0");
+    if !&tpm.request_locality(0)? {
+        println!("[-] Failed to get locality 0");
+        return Ok(());
     }
-    let sts = &tpm.read_status()?;
-    println!("{sts:?}");
+    println!("{:?}", &tpm.read_access()?);
+    println!("{:?}", &tpm.read_status()?);
+    let _ = &tpm.wait_command_ready()?;
+    println!("[+] Send TPM2_Startup");
+    let _ = &tpm.write_fifo(&[
+        0x80, 0x01, // tag
+        0x00, 0x00, 0x00, 0x0c, // commandSize
+        0x00, 0x00, 0x01, 0x44, // commandCode
+        0x00, 0x00, // param
+    ])?;
+    println!("Go");
+    let _ = &tpm.execute()?;
+    println!("read_fifo");
+    let r = &tpm.read_fifo();
+    println!("{r:?}");
 
     Ok(())
 }

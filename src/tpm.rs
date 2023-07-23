@@ -1,5 +1,7 @@
-use crate::TpmResult;
+use crate::{Error, TpmResult};
 use bitfield_struct::bitfield;
+use std::thread::sleep;
+use std::time::Duration;
 
 #[bitfield(u32)]
 pub struct TpmStatus {
@@ -64,6 +66,15 @@ fn u32le(arr: &[u8]) -> u32 {
     arr[0] as u32 + ((arr[1] as u32) << 8) + ((arr[2] as u32) << 16) + ((arr[3] as u32) << 24)
 }
 
+fn p32le(x: u32) -> [u8; 4] {
+    [
+        (x & 255) as u8,
+        ((x >> 8) & 255) as u8,
+        ((x >> 16) & 255) as u8,
+        ((x >> 24) & 255) as u8,
+    ]
+}
+
 pub trait I2CTpmAccessor {
     fn i2c_read(&mut self, read_buf: &mut [u8]) -> TpmResult<()>;
     fn i2c_write(&mut self, write_buf: &[u8]) -> TpmResult<()>;
@@ -120,6 +131,104 @@ impl Tpm {
         Ok(TpmAccess::from(read_buf[0]))
     }
 
+    pub fn read_status(&mut self) -> TpmResult<TpmStatus> {
+        let mut read_sts_buf = [0u8; 4];
+        self.device.i2c_write(&[0x18])?;
+        self.device.i2c_read(&mut read_sts_buf)?;
+        Ok(TpmStatus::from(u32le(&read_sts_buf)))
+    }
+
+    pub fn write_status(&mut self, status: &TpmStatus) -> TpmResult<()> {
+        let x: u32 = (*status).into();
+        let v = p32le(x);
+        self.device.i2c_write(&[0x18, v[0], v[1], v[2], v[3]])?;
+        Ok(())
+    }
+
+    pub fn write_fifo(&mut self, data: &[u8]) -> TpmResult<()> {
+        self.wait_command_ready()?;
+        for x in data {
+            let burst_count = self.read_status()?.burst_count() as usize;
+            if burst_count >= 0x8000 {
+                return Err(Error::TpmBusy);
+            }
+            if burst_count == 0 {
+                return Err(Error::Unknown);
+            }
+            self.device.i2c_write(&[0x24, *x])?;
+            self.wait_status_valid()?;
+            if !self.read_status()?.expect() {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn read_fifo(&mut self) -> TpmResult<Vec<u8>> {
+        self.wait_data()?;
+        let n = self.read_status()?.burst_count() as usize;
+        let mut v = vec![0u8; n];
+
+        self.device.i2c_write(&[0x24u8])?;
+        self.device.i2c_read(&mut v)?;
+
+        Ok(v)
+    }
+
+    pub fn wait_command_ready(&mut self) -> TpmResult<()> {
+        loop {
+            let status = self.read_status()?;
+            if status.command_ready() {
+                break;
+            }
+            self.write_status(&TpmStatus::new().with_command_ready(true))?;
+            sleep(Duration::from_millis(50));
+        }
+        Ok(())
+    }
+
+    pub fn wait_status_valid(&mut self) -> TpmResult<()> {
+        loop {
+            let status = self.read_status()?;
+            if status.status_valid() {
+                break;
+            }
+            sleep(Duration::from_millis(50));
+        }
+        Ok(())
+    }
+
+    pub fn wait_data(&mut self) -> TpmResult<()> {
+        loop {
+            self.wait_status_valid()?;
+            if self.read_status()?.data_available() {
+                break;
+            }
+            sleep(Duration::from_millis(50));
+        }
+        Ok(())
+    }
+
+    pub fn request_locality(&mut self, loc: u8) -> TpmResult<bool> {
+        if self.read_access()?.active_locality() {
+            return Ok(true);
+        }
+
+        self.write_access(&TpmAccess::new().with_request_use(true))?;
+        self.write_access(&TpmAccess::new().with_request_use(true))?;
+        sleep(Duration::from_millis(5));
+        self.write_locality(loc)?;
+        Ok(self.read_access()?.active_locality())
+    }
+
+    pub fn release_locality(&mut self) -> TpmResult<()> {
+        let ac = self.read_access()?;
+        if ac.pending_request() && ac.tpm_reg_valid_status() {
+            self.write_access(&TpmAccess::new().with_active_locality(true))?;
+        }
+        Ok(())
+    }
+
     pub fn read_locality(&mut self) -> TpmResult<u8> {
         let mut read_buf = [0u8; 1];
         self.device.i2c_write(&[0x00])?;
@@ -132,10 +241,7 @@ impl Tpm {
         Ok(())
     }
 
-    pub fn read_status(&mut self) -> TpmResult<TpmStatus> {
-        let mut read_sts_buf = [0u8; 4];
-        self.device.i2c_write(&[0x18])?;
-        self.device.i2c_read(&mut read_sts_buf)?;
-        Ok(TpmStatus::from(u32le(&read_sts_buf)))
+    pub fn execute(&mut self) -> TpmResult<()> {
+        self.write_status(&TpmStatus::new().with_tpm_go(true))
     }
 }
