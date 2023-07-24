@@ -2,7 +2,7 @@
 extern crate num_derive;
 
 use crate::tpm::command::{tpm2_selftest, tpm2_startup, TpmStartupType, TpmiYesNo};
-use crate::tpm::tpm::Tpm;
+use crate::tpm::Tpm;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use std::convert::From;
 use std::fmt;

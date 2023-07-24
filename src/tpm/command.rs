@@ -163,15 +163,15 @@ pub enum TpmiYesNo {
 }
 
 pub struct Tpm2Command {
-    tag: TpmStructureTag,
-    command_code: Tpm2CommandCode,
+    pub tag: TpmStructureTag,
+    pub command_code: Tpm2CommandCode,
     pub params: Vec<Box<dyn TpmData>>,
 }
 
 #[derive(Debug)]
 pub struct Tpm2Response {
-    tag: TpmStructureTag,
-    response_code: TpmResponseCode,
+    pub tag: TpmStructureTag,
+    pub response_code: TpmResponseCode,
     pub params: Vec<u8>,
 }
 
