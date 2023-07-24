@@ -1,3 +1,7 @@
+#[macro_use]
+extern crate num_derive;
+
+use crate::tpm::command::{tpm2_selftest, tpm2_startup, TpmStartupType, TpmiYesNo};
 use crate::tpm::tpm::Tpm;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use std::convert::From;
@@ -5,6 +9,7 @@ use std::fmt;
 
 pub mod driver;
 pub mod tpm;
+pub mod util;
 
 pub type TpmResult<T> = Result<T, Error>;
 
@@ -13,6 +18,7 @@ pub enum Error {
     LinuxI2CError(LinuxI2CError),
     Unknown,
     TpmBusy,
+    TpmParse,
 }
 
 impl fmt::Display for Error {
@@ -21,6 +27,7 @@ impl fmt::Display for Error {
             Error::LinuxI2CError(e) => write!(f, "{}", e),
             Error::Unknown => write!(f, "Unknown"),
             Error::TpmBusy => write!(f, "Busy"),
+            Error::TpmParse => write!(f, "Parse"),
         }
     }
 }
@@ -114,32 +121,19 @@ fn print_info(tpm: &mut Tpm) -> TpmResult<()> {
 fn main() -> TpmResult<()> {
     let mut tpm = Tpm::new(Box::new(LinuxI2CDevice::new("/dev/i2c-9", 0x2e)?))?;
 
-    let (tpm_vendor_id, tpm_device_id, tpm_revision_id) = &tpm.read_identifiers()?;
+    let (tpm_vendor_id, tpm_device_id, tpm_revision_id) = tpm.read_identifiers()?;
     // For Infineon SLB9673 only
-    assert_eq!(tpm_vendor_id, &0x15d1);
-    assert_eq!(tpm_device_id, &0x001c);
-    assert_eq!(tpm_revision_id, &0x16);
+    assert_eq!(tpm_vendor_id, 0x15d1);
+    assert_eq!(tpm_device_id, 0x001c);
+    assert_eq!(tpm_revision_id, 0x16);
     print_info(&mut tpm)?;
-    println!("[+] Change locality to 1");
-    println!("{:?}", &tpm.read_status()?);
-    if !&tpm.request_locality(0)? {
+    if !tpm.request_locality(0)? {
         println!("[-] Failed to get locality control");
         return Ok(());
     }
-    println!("{:?}", &tpm.read_status()?);
-    let _ = &tpm.wait_command_ready()?;
-    println!("[+] Send TPM2_Startup");
-    let _ = &tpm.write_fifo(&[
-        0x80, 0x01, // tag
-        0x00, 0x00, 0x00, 0x0c, // commandSize
-        0x00, 0x00, 0x01, 0x44, // commandCode
-        0x00, 0x00, // param
-    ])?;
-    println!("Go");
-    let _ = &tpm.execute()?;
-    println!("read_fifo");
-    let r = &tpm.read_fifo();
-    println!("{r:?}");
+    tpm.execute(&tpm2_startup(TpmStartupType::Clear))?;
+    tpm.execute(&tpm2_selftest(TpmiYesNo::No))?;
+    println!("{:?}", tpm.read_status()?);
 
     Ok(())
 }

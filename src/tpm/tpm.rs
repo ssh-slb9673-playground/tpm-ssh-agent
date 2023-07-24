@@ -1,3 +1,5 @@
+use crate::tpm::command::{Tpm2Command, Tpm2Response};
+use crate::util::{p32le, u16le, u32le};
 use crate::{Error, TpmResult};
 use bitfield_struct::bitfield;
 use std::thread::sleep;
@@ -58,23 +60,6 @@ pub struct TpmInterfaceCaps {
     _reserved: bool,
 }
 
-fn u16le(arr: &[u8]) -> u16 {
-    arr[0] as u16 + ((arr[1] as u16) << 8)
-}
-
-fn u32le(arr: &[u8]) -> u32 {
-    arr[0] as u32 + ((arr[1] as u32) << 8) + ((arr[2] as u32) << 16) + ((arr[3] as u32) << 24)
-}
-
-fn p32le(x: u32) -> [u8; 4] {
-    [
-        (x & 255) as u8,
-        ((x >> 8) & 255) as u8,
-        ((x >> 16) & 255) as u8,
-        ((x >> 24) & 255) as u8,
-    ]
-}
-
 pub trait I2CTpmAccessor {
     fn i2c_read(&mut self, read_buf: &mut [u8]) -> TpmResult<()>;
     fn i2c_write(&mut self, write_buf: &[u8]) -> TpmResult<()>;
@@ -121,6 +106,7 @@ impl Tpm {
         let mut read_cap_buf = [0u8; 4];
         self.write_locality(self.current_locality)?;
         self.device.i2c_write(&[0x30])?;
+        sleep(Duration::from_millis(5));
         self.device.i2c_read(&mut read_cap_buf)?;
         Ok(TpmInterfaceCaps::from(u32le(&read_cap_buf)))
     }
@@ -136,6 +122,7 @@ impl Tpm {
         let mut read_buf = [0u8; 1];
         self.write_locality(loc)?;
         self.device.i2c_write(&[0x04])?;
+        sleep(Duration::from_millis(5));
         self.device.i2c_read(&mut read_buf)?;
         Ok(TpmAccess::from(read_buf[0]))
     }
@@ -152,6 +139,7 @@ impl Tpm {
         let mut read_sts_buf = [0u8; 4];
         self.write_locality(self.current_locality)?;
         self.device.i2c_write(&[0x18])?;
+        sleep(Duration::from_millis(5));
         self.device.i2c_read(&mut read_sts_buf)?;
         Ok(TpmStatus::from(u32le(&read_sts_buf)))
     }
@@ -176,6 +164,7 @@ impl Tpm {
                 return Err(Error::Unknown);
             }
             self.device.i2c_write(&[0x24, *x])?;
+            sleep(Duration::from_millis(5));
             self.wait_status_valid()?;
             if !self.read_status()?.expect() {
                 break;
@@ -191,6 +180,7 @@ impl Tpm {
 
         self.write_locality(self.current_locality)?;
         self.device.i2c_write(&[0x24u8])?;
+        sleep(Duration::from_millis(5));
         self.device.i2c_read(&mut v)?;
 
         Ok(v)
@@ -203,7 +193,7 @@ impl Tpm {
                 break;
             }
             self.write_status(&TpmStatus::new().with_command_ready(true))?;
-            sleep(Duration::from_millis(50));
+            sleep(Duration::from_millis(5));
         }
         Ok(())
     }
@@ -214,7 +204,7 @@ impl Tpm {
             if status.status_valid() {
                 break;
             }
-            sleep(Duration::from_millis(50));
+            sleep(Duration::from_millis(5));
         }
         Ok(())
     }
@@ -225,7 +215,7 @@ impl Tpm {
             if self.read_status()?.data_available() {
                 break;
             }
-            sleep(Duration::from_millis(50));
+            sleep(Duration::from_millis(5));
         }
         Ok(())
     }
@@ -276,6 +266,7 @@ impl Tpm {
     pub fn read_locality(&mut self) -> TpmResult<u8> {
         let mut read_buf = [0u8; 1];
         self.device.i2c_write(&[0x00])?;
+        sleep(Duration::from_millis(5));
         self.device.i2c_read(&mut read_buf)?;
         Ok(read_buf[0])
     }
@@ -285,8 +276,12 @@ impl Tpm {
         Ok(())
     }
 
-    pub fn execute(&mut self) -> TpmResult<()> {
-        self.write_status(&TpmStatus::new().with_tpm_go(true))
+    pub fn execute(&mut self, cmd: &Tpm2Command) -> TpmResult<Tpm2Response> {
+        self.request_locality(0)?;
+        self.write_fifo(cmd.to_tpm().as_slice())?;
+        sleep(Duration::from_millis(5));
+        self.write_status(&TpmStatus::new().with_tpm_go(true))?;
+        Tpm2Response::from_tpm(self.read_fifo()?.as_slice())
     }
 
     pub fn current_locality(&self) -> u8 {
