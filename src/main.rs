@@ -1,4 +1,4 @@
-use crate::tpm::{Tpm, TpmStatus};
+use crate::tpm::tpm::Tpm;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use std::convert::From;
 use std::fmt;
