@@ -112,7 +112,7 @@ fn print_info(tpm: &mut Tpm) -> TpmResult<()> {
 }
 
 fn main() -> TpmResult<()> {
-    let mut tpm = Tpm::new(Box::new(LinuxI2CDevice::new("/dev/i2c-9", 0x2e)?));
+    let mut tpm = Tpm::new(Box::new(LinuxI2CDevice::new("/dev/i2c-9", 0x2e)?))?;
 
     let (tpm_vendor_id, tpm_device_id, tpm_revision_id) = &tpm.read_identifiers()?;
     // For Infineon SLB9673 only
@@ -120,12 +120,12 @@ fn main() -> TpmResult<()> {
     assert_eq!(tpm_device_id, &0x001c);
     assert_eq!(tpm_revision_id, &0x16);
     print_info(&mut tpm)?;
-    println!("[+] Change locality to 0");
+    println!("[+] Change locality to 1");
+    println!("{:?}", &tpm.read_status()?);
     if !&tpm.request_locality(0)? {
-        println!("[-] Failed to get locality 0");
+        println!("[-] Failed to get locality control");
         return Ok(());
     }
-    println!("{:?}", &tpm.read_access()?);
     println!("{:?}", &tpm.read_status()?);
     let _ = &tpm.wait_command_ready()?;
     println!("[+] Send TPM2_Startup");
