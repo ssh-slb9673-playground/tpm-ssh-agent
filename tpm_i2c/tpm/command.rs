@@ -1,5 +1,6 @@
+use crate::tpm::TpmError;
 use crate::util::{p16be, p32be, u16be, u32be};
-use crate::{Error, TpmResult};
+use crate::TpmResult;
 
 pub trait TpmData {
     fn to_tpm(&self) -> Vec<u8>;
@@ -195,13 +196,13 @@ where
     T: num_traits::FromPrimitive,
 {
     if v.is_empty() {
-        return Err(Error::TpmParse);
+        return Err(TpmError::Parse.into());
     }
 
     if let Some(x) = num_traits::FromPrimitive::from_u8(v[0]) {
         Ok((x, &v[1..]))
     } else {
-        Err(Error::TpmParse)
+        Err(TpmError::Parse.into())
     }
 }
 
@@ -217,13 +218,13 @@ where
     T: num_traits::FromPrimitive,
 {
     if v.len() < 2 {
-        return Err(Error::TpmParse);
+        return Err(TpmError::Parse.into());
     }
 
     if let Some(x) = num_traits::FromPrimitive::from_u16(u16be(&v[0..2])) {
         Ok((x, &v[2..]))
     } else {
-        Err(Error::TpmParse)
+        Err(TpmError::Parse.into())
     }
 }
 
@@ -239,13 +240,13 @@ where
     T: num_traits::FromPrimitive,
 {
     if v.len() < 4 {
-        return Err(Error::TpmParse);
+        return Err(TpmError::Parse.into());
     }
 
     if let Some(x) = num_traits::FromPrimitive::from_u32(u32be(&v[0..4])) {
         Ok((x, &v[4..]))
     } else {
-        Err(Error::TpmParse)
+        Err(TpmError::Parse.into())
     }
 }
 
@@ -306,7 +307,7 @@ impl TpmData for TpmUint16 {
 
     fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
         if v.len() < 2 {
-            return Err(Error::TpmParse);
+            return Err(TpmError::Parse.into());
         }
         Ok((TpmUint16::new(u16be(&v[0..2])), &v[2..]))
     }
@@ -342,14 +343,14 @@ impl Tpm2Response {
     pub fn from_tpm(v: &[u8]) -> TpmResult<Tpm2Response> {
         // len(v) must be larger than len(tag + response_size + response_code)
         if v.len() < 10 {
-            return Err(Error::TpmParse);
+            return Err(TpmError::Parse.into());
         }
         let len = v.len() as u32;
         let (tag, v) = TpmStructureTag::from_tpm(v)?;
         let (size, v) = (u32be(&v[0..4]), &v[4..]);
 
         if len != size {
-            return Err(Error::TpmParse);
+            return Err(TpmError::Parse.into());
         }
 
         let (response_code, params) = TpmResponseCode::from_tpm(v)?;

@@ -9,6 +9,33 @@ use crate::tpm::command::{
 pub mod command;
 pub mod core_impl;
 
+#[derive(Debug)]
+pub enum TpmError {
+    UnsuccessfulResponse(command::TpmResponseCode),
+    Parse,
+    Busy,
+    Unreadable,
+}
+
+impl std::fmt::Display for TpmError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match &self {
+            TpmError::UnsuccessfulResponse(rc) => write!(f, "Unsuccessful Result: RC = {:?}", rc),
+            TpmError::Parse => write!(f, "TPM Parse"),
+            TpmError::Busy => write!(f, "TPM Busy"),
+            TpmError::Unreadable => write!(f, "TPM Unreadable"),
+        }
+    }
+}
+
+impl std::error::Error for TpmError {}
+
+impl std::convert::From<TpmError> for Error {
+    fn from(err: TpmError) -> Error {
+        Error::TpmError(err)
+    }
+}
+
 #[bitfield(u32)]
 pub struct TpmStatus {
     _reserverd_0: bool,
@@ -98,7 +125,9 @@ impl Tpm {
             return Err(Error::Unknown);
         }
         let res = self.startup(TpmStartupType::Clear);
-        if let Err(Error::TpmError(TpmResponseCode::Initialize)) = res {
+        if let Err(Error::TpmError(TpmError::UnsuccessfulResponse(TpmResponseCode::Initialize))) =
+            res
+        {
             println!("[*] TPM was already initialied");
         } else if res.is_err() {
             return res;
@@ -193,7 +222,7 @@ impl Tpm {
             vec![Box::new(st)],
         ))?;
         if res.response_code != TpmResponseCode::Success {
-            Err(Error::TpmError(res.response_code))
+            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
         } else {
             Ok(())
         }
@@ -206,7 +235,7 @@ impl Tpm {
             vec![Box::new(full_test)],
         ))?;
         if res.response_code != TpmResponseCode::Success {
-            Err(Error::TpmError(res.response_code))
+            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
         } else {
             Ok(())
         }
@@ -219,7 +248,7 @@ impl Tpm {
             vec![Box::new(TpmUint16::new(len))],
         ))?;
         if res.response_code != TpmResponseCode::Success {
-            Err(Error::TpmError(res.response_code))
+            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
         } else {
             Ok(res.params)
         }

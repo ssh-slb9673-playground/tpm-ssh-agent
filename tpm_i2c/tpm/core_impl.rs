@@ -1,8 +1,8 @@
 use crate::tpm::command::{Tpm2Command, Tpm2Response};
-use crate::tpm::{Tpm, TpmInterfaceCaps};
+use crate::tpm::{Tpm, TpmError, TpmInterfaceCaps};
 use crate::tpm::{TpmAccess, TpmStatus};
 use crate::util::{p32le, u16le, u32le};
-use crate::{Error, TpmResult};
+use crate::TpmResult;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -88,10 +88,10 @@ impl Tpm {
         for x in data {
             let burst_count = self.read_status()?.burst_count() as usize;
             if burst_count >= 0x8000 {
-                return Err(Error::TpmBusy);
+                return Err(TpmError::Busy.into());
             }
             if burst_count == 0 {
-                return Err(Error::Unknown);
+                return Err(TpmError::Unreadable.into());
             }
             self.device.i2c_write(&[0x24, *x])?;
             sleep(Duration::from_millis(5));

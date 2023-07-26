@@ -1,9 +1,11 @@
 extern crate tpm_i2c;
 
+mod driver;
+
 fn main() -> tpm_i2c::TpmResult<()> {
     use tpm_i2c::tpm::Tpm;
 
-    let device = hidapi::HidApi::new()?.open(0x04d8, 0x00dd)?;
+    let device = driver::hidapi::MCP2221A::new(0x2e)?;
     // let mut tpm = Tpm::new(Box::new(LinuxI2CDevice::new("/dev/i2c-9", 0x2e)?))?;
     let mut tpm = Tpm::new(Box::new(device))?;
     tpm.init()?;
