@@ -1,5 +1,3 @@
-extern crate hidapi;
-
 use std::thread::sleep;
 use std::time::Duration;
 use tpm_i2c::tpm::I2CTpmAccessor;

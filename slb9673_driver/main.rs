@@ -1,5 +1,3 @@
-extern crate tpm_i2c;
-
 mod driver;
 
 fn main() -> tpm_i2c::TpmResult<()> {

@@ -1,4 +1,3 @@
-extern crate i2cdev;
 use i2cdev::core::*;
 use i2cdev::linux::LinuxI2CDevice;
 use tpm_i2c::tpm::I2CTpmAccessor;

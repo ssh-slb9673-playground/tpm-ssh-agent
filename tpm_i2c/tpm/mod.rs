@@ -1,20 +1,18 @@
 use crate::{Error, TpmResult};
-use bitfield_struct::bitfield;
 
-use crate::tpm::command::{
-    Tpm2Command, Tpm2CommandCode, TpmResponseCode, TpmStartupType, TpmStructureTag, TpmUint16,
-    TpmiYesNo,
-};
+use structure::{Tpm2Command, TpmResponseCode, TpmStartupType, TpmiYesNo};
 
-pub mod command;
-pub mod core_impl;
+pub mod commands;
+mod i2c;
+pub mod structure;
 
 #[derive(Debug)]
 pub enum TpmError {
-    UnsuccessfulResponse(command::TpmResponseCode),
+    UnsuccessfulResponse(structure::TpmResponseCode),
     Parse,
     Busy,
     Unreadable,
+    LocalityReq(u8),
 }
 
 impl std::fmt::Display for TpmError {
@@ -24,6 +22,7 @@ impl std::fmt::Display for TpmError {
             TpmError::Parse => write!(f, "TPM Parse"),
             TpmError::Busy => write!(f, "TPM Busy"),
             TpmError::Unreadable => write!(f, "TPM Unreadable"),
+            TpmError::LocalityReq(n) => write!(f, "Can't get control of locality {}", n),
         }
     }
 }
@@ -36,59 +35,11 @@ impl std::convert::From<TpmError> for Error {
     }
 }
 
-#[bitfield(u32)]
-pub struct TpmStatus {
-    _reserverd_0: bool,
-    pub response_retry: bool,
-    pub self_test_done: bool,
-    pub expect: bool,
-    pub data_available: bool,
-    pub tpm_go: bool,
-    pub command_ready: bool,
-    pub status_valid: bool,
-    pub burst_count: u16,
-    pub command_cancel: bool,
-    pub reset_establishment_bit: bool,
-    #[bits(6)]
-    _reserved: u8,
-}
-
-#[bitfield(u8)]
-pub struct TpmAccess {
-    pub tpm_establishment: bool,
-    pub request_use: bool,
-    pub pending_request: bool,
-    pub seize: bool,
-    pub been_seized: bool,
-    pub active_locality: bool,
-    _reserved: bool,
-    pub tpm_reg_valid_status: bool,
-}
-
-#[bitfield(u32)]
-pub struct TpmInterfaceCaps {
-    #[bits(4)]
-    pub interface_type: u8,
-    #[bits(3)]
-    pub interface_version: u8,
-    #[bits(2)]
-    pub tpm_family: u8,
-    pub guard_time_usec: u8,
-    pub need_guard_write_write: bool,
-    pub need_guard_write_read: bool,
-    pub need_guard_read_write: bool,
-    pub need_guard_read_read: bool,
-    pub sm_support: bool,
-    pub fm_support: bool,
-    pub fmplus_support: bool,
-    pub hsmode_support: bool,
-    #[bits(2)]
-    pub cap_locality: u8,
-    #[bits(2)]
-    pub device_address_change: u8,
-    pub burst_count_static: bool,
-    pub guard_time_repeated_start: bool,
-    _reserved: bool,
+pub trait TpmData {
+    fn to_tpm(&self) -> Vec<u8>;
+    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])>
+    where
+        Self: Sized;
 }
 
 pub trait I2CTpmAccessor {
@@ -114,6 +65,19 @@ impl Tpm {
         })
     }
 
+    pub(in crate::tpm) fn execute(
+        &mut self,
+        cmd: &Tpm2Command,
+    ) -> TpmResult<structure::Tpm2Response> {
+        use std::thread::sleep;
+        use std::time::Duration;
+        self.request_locality(0)?;
+        self.write_fifo(cmd.to_tpm().as_slice())?;
+        sleep(Duration::from_millis(5));
+        self.write_status(&i2c::TpmStatus::new().with_tpm_go(true))?;
+        structure::Tpm2Response::from_tpm(self.read_fifo()?.as_slice())
+    }
+
     pub fn init(&mut self) -> TpmResult<()> {
         let (tpm_vendor_id, tpm_device_id, tpm_revision_id) = self.read_identifiers()?;
         // For Infineon SLB9673 only
@@ -121,8 +85,7 @@ impl Tpm {
         assert_eq!(tpm_device_id, 0x001c);
         assert_eq!(tpm_revision_id, 0x16);
         if !self.request_locality(0)? {
-            println!("[-] Failed to get locality control");
-            return Err(Error::Unknown);
+            return Err(TpmError::LocalityReq(0).into());
         }
         let res = self.startup(TpmStartupType::Clear);
         if let Err(Error::TpmError(TpmError::UnsuccessfulResponse(TpmResponseCode::Initialize))) =
@@ -131,126 +94,10 @@ impl Tpm {
             println!("[*] TPM was already initialied");
         } else if res.is_err() {
             return res;
+        } else {
+            self.selftest(TpmiYesNo::No)?;
         }
-        self.selftest(TpmiYesNo::No)?;
         self.release_locality()?;
         Ok(())
-    }
-
-    pub fn print_info(&mut self) -> TpmResult<()> {
-        let caps = self.read_capabilities()?;
-        println!("### TPM Information ###");
-        let (tpm_vendor_id, tpm_device_id, tpm_revision_id) = self.read_identifiers()?;
-
-        println!("* Vendor ID: {:04x}", tpm_vendor_id);
-        println!("* Device ID: {:04x}", tpm_device_id);
-        println!("* Revision ID: {:04x}", tpm_revision_id);
-
-        print!("* Interface Type: ");
-        if caps.interface_type() == 0b0010 {
-            println!("FIFO over I2C");
-        } else {
-            println!("Unknown({})", caps.interface_type());
-        }
-
-        print!("* Interface Version: ");
-        if caps.interface_version() == 0b000 {
-            println!("TCG I2C Interface 1.0");
-        } else {
-            println!("Unknown({})", caps.interface_version());
-        }
-
-        print!("* TPM Family: ");
-        match caps.tpm_family() {
-            0b00 => println!("TPM 1.2"),
-            0b01 => println!("TPM 2.0"),
-            x => println!("Unknown({})", x),
-        }
-
-        println!("* Guard time: {} usec", caps.guard_time_usec());
-        println!("* Need Guard time?");
-        println!("  - Write after Write: {}", caps.need_guard_write_write());
-        println!("  - Write after Read: {}", caps.need_guard_write_read());
-        println!("  - Read after Write: {}", caps.need_guard_read_write());
-        println!("  - Read after Read: {}", caps.need_guard_read_read());
-        println!(
-            "  - ACK/NACK to repeated START: {}",
-            caps.guard_time_repeated_start()
-        );
-
-        let sup_bool = |x: bool| if x { "Supported" } else { "Unsupported" };
-        println!("* I2C Bus Speed Capabilities");
-        println!("  - Standard Mode: {}", sup_bool(caps.sm_support()));
-        println!("  - Fast Mode: {}", sup_bool(caps.fm_support()));
-        println!("  - Fast Mode Plus: {}", sup_bool(caps.fmplus_support()));
-        println!("  - High-Speed Mode: {}", sup_bool(caps.hsmode_support()));
-
-        print!("* Supported locality: ");
-
-        match caps.cap_locality() {
-            0b00 => println!("[0]"),
-            0b01 => println!("[0, 1, 2, 3, 4]"),
-            0b10 => println!("[0, 1, 2, ..., 255]"),
-            x => println!("Unknown({})", x),
-        }
-
-        print!("* Changing I2C Address: ");
-        match caps.device_address_change() {
-            0b00 => println!("Unupported"),
-            0b01 => println!("Supported (by vendor specific mechanism)"),
-            0b10 => println!("Reserved (bug?)"),
-            0b11 => println!("Supported (by TCG-defined mechanism)"),
-            _ => println!("Invalid"),
-        }
-
-        println!(
-            "* Burst count: {}",
-            if caps.burst_count_static() {
-                "Static"
-            } else {
-                "Dynamic"
-            }
-        );
-
-        Ok(())
-    }
-
-    fn startup(&mut self, st: TpmStartupType) -> TpmResult<()> {
-        let res = self.execute(&Tpm2Command::new(
-            TpmStructureTag::NoSessions,
-            Tpm2CommandCode::Startup,
-            vec![Box::new(st)],
-        ))?;
-        if res.response_code != TpmResponseCode::Success {
-            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
-        } else {
-            Ok(())
-        }
-    }
-
-    fn selftest(&mut self, full_test: TpmiYesNo) -> TpmResult<()> {
-        let res = self.execute(&Tpm2Command::new(
-            TpmStructureTag::NoSessions,
-            Tpm2CommandCode::SelfTest,
-            vec![Box::new(full_test)],
-        ))?;
-        if res.response_code != TpmResponseCode::Success {
-            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
-        } else {
-            Ok(())
-        }
-    }
-
-    pub fn get_random(&mut self, len: u16) -> TpmResult<Vec<u8>> {
-        let res = self.execute(&Tpm2Command::new(
-            TpmStructureTag::NoSessions,
-            Tpm2CommandCode::GetRandom,
-            vec![Box::new(TpmUint16::new(len))],
-        ))?;
-        if res.response_code != TpmResponseCode::Success {
-            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
-        } else {
-            Ok(res.params)
-        }
     }
 }
