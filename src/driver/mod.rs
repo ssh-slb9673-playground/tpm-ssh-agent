@@ -1,1 +1,2 @@
-mod i2cdev;
+pub mod hidapi;
+pub mod i2cdev;

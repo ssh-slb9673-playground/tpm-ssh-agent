@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 bitfield-struct = "0.5.2"
 bitflags = "2.3.3"
+hidapi = "2.4.1"
 i2cdev = "0.5.1"
 num-derive = "0.4.0"
 num-traits = "0.2.16"

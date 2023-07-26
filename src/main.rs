@@ -1,33 +1,35 @@
 #[macro_use]
 extern crate num_derive;
 
-use crate::tpm::command::{tpm2_selftest, tpm2_startup, TpmStartupType, TpmiYesNo};
-use crate::tpm::Tpm;
-use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
+use i2cdev::linux::LinuxI2CError;
 use std::convert::From;
 use std::fmt;
 
-pub mod driver;
+mod driver;
 pub mod tpm;
-pub mod util;
+mod util;
 
 pub type TpmResult<T> = Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
     LinuxI2CError(LinuxI2CError),
+    HidApiError(hidapi::HidError),
     Unknown,
     TpmBusy,
     TpmParse,
+    Hardware,
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
             Error::LinuxI2CError(e) => write!(f, "{}", e),
+            Error::HidApiError(e) => write!(f, "{}", e),
             Error::Unknown => write!(f, "Unknown"),
             Error::TpmBusy => write!(f, "Busy"),
             Error::TpmParse => write!(f, "Parse"),
+            Error::Hardware => write!(f, "Hardware"),
         }
     }
 }
@@ -40,7 +42,13 @@ impl From<i2cdev::linux::LinuxI2CError> for Error {
     }
 }
 
-fn print_info(tpm: &mut Tpm) -> TpmResult<()> {
+impl From<hidapi::HidError> for Error {
+    fn from(err: hidapi::HidError) -> Error {
+        Error::HidApiError(err)
+    }
+}
+
+fn print_info(tpm: &mut tpm::Tpm) -> TpmResult<()> {
     let caps = &tpm.read_capabilities()?;
     println!("### TPM Information ###");
     let (tpm_vendor_id, tpm_device_id, tpm_revision_id) = &tpm.read_identifiers()?;
@@ -119,7 +127,14 @@ fn print_info(tpm: &mut Tpm) -> TpmResult<()> {
 }
 
 fn main() -> TpmResult<()> {
-    let mut tpm = Tpm::new(Box::new(LinuxI2CDevice::new("/dev/i2c-9", 0x2e)?))?;
+    use crate::tpm::command::{tpm2_selftest, tpm2_startup, TpmStartupType, TpmiYesNo};
+    use crate::tpm::Tpm;
+
+    let api = hidapi::HidApi::new()?;
+    let device = api.open(0x04d8, 0x00dd)?;
+    driver::hidapi::setup_i2c(&device)?;
+    // let mut tpm = Tpm::new(Box::new(LinuxI2CDevice::new("/dev/i2c-9", 0x2e)?))?;
+    let mut tpm = Tpm::new(Box::new(device))?;
 
     let (tpm_vendor_id, tpm_device_id, tpm_revision_id) = tpm.read_identifiers()?;
     // For Infineon SLB9673 only
@@ -127,7 +142,7 @@ fn main() -> TpmResult<()> {
     assert_eq!(tpm_device_id, 0x001c);
     assert_eq!(tpm_revision_id, 0x16);
     print_info(&mut tpm)?;
-    if !tpm.request_locality(0)? {
+    if !tpm.request_locality(3)? {
         println!("[-] Failed to get locality control");
         return Ok(());
     }
