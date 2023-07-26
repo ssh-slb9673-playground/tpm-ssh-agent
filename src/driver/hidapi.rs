@@ -23,9 +23,27 @@ pub fn wait_busy(device: &hidapi::HidDevice) -> TpmResult<()> {
 }
 
 pub fn setup_i2c(device: &hidapi::HidDevice) -> TpmResult<()> {
-    device.write(&[0x10u8, 0, 0x10, 0x20, 22])?; // 500kHz
+    device.write(&[0x10u8, 0, 0, 0, 0])?;
     let mut buf = [0u8; 65];
     device.read(&mut buf)?;
+    if buf[8] != 0 {
+        // need to cancel current transport
+        device.write(&[0x10u8, 0, 0x10, 0, 0])?;
+        let mut buf = [0u8; 65];
+        device.read(&mut buf)?;
+
+        sleep(Duration::from_millis(250));
+    }
+    loop {
+        device.write(&[0x10u8, 0, 0, 0x20, 22])?; // 500kHz
+        let mut buf = [0u8; 65];
+        device.read(&mut buf)?;
+        if buf[3] == 0x20 {
+            // changing success
+            break;
+        }
+        sleep(Duration::from_millis(250));
+    }
     Ok(())
 }
 

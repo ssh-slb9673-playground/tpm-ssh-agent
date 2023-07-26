@@ -34,7 +34,7 @@ pub enum TpmStructureTag {
     FuManifest = 0x8029,
 }
 
-#[derive(FromPrimitive, ToPrimitive, Debug)]
+#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum TpmResponseCode {
     Success = 0,
@@ -146,6 +146,7 @@ pub enum TpmResponseCode {
 pub enum Tpm2CommandCode {
     Startup = 0x0144,
     SelfTest = 0x0143,
+    GetRandom = 0x017B,
 }
 
 #[derive(FromPrimitive, ToPrimitive, Debug)]
@@ -162,6 +163,11 @@ pub enum TpmiYesNo {
     Yes = 1,
 }
 
+#[derive(Debug)]
+pub struct TpmUint16 {
+    value: u16,
+}
+
 pub struct Tpm2Command {
     pub tag: TpmStructureTag,
     pub command_code: Tpm2CommandCode,
@@ -173,22 +179,6 @@ pub struct Tpm2Response {
     pub tag: TpmStructureTag,
     pub response_code: TpmResponseCode,
     pub params: Vec<u8>,
-}
-
-pub fn tpm2_startup(st: TpmStartupType) -> Tpm2Command {
-    Tpm2Command {
-        tag: TpmStructureTag::NoSessions,
-        command_code: Tpm2CommandCode::Startup,
-        params: vec![Box::new(st)],
-    }
-}
-
-pub fn tpm2_selftest(full_test: TpmiYesNo) -> Tpm2Command {
-    Tpm2Command {
-        tag: TpmStructureTag::NoSessions,
-        command_code: Tpm2CommandCode::SelfTest,
-        params: vec![Box::new(full_test)],
-    }
 }
 
 // internal implementations
@@ -309,7 +299,32 @@ impl TpmData for TpmiYesNo {
     }
 }
 
+impl TpmData for TpmUint16 {
+    fn to_tpm(&self) -> Vec<u8> {
+        p16be(self.value).to_vec()
+    }
+
+    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+        if v.len() < 2 {
+            return Err(Error::TpmParse);
+        }
+        Ok((TpmUint16::new(u16be(&v[0..2])), &v[2..]))
+    }
+}
+
 impl Tpm2Command {
+    pub fn new(
+        tag: TpmStructureTag,
+        command_code: Tpm2CommandCode,
+        params: Vec<Box<dyn TpmData>>,
+    ) -> Self {
+        Tpm2Command {
+            tag,
+            command_code,
+            params,
+        }
+    }
+
     pub fn to_tpm(&self) -> Vec<u8> {
         let tag = self.tag.to_tpm();
         let cc = self.command_code.to_tpm();
@@ -343,5 +358,11 @@ impl Tpm2Response {
             response_code,
             params: params.to_vec(),
         })
+    }
+}
+
+impl TpmUint16 {
+    pub fn new(value: u16) -> Self {
+        TpmUint16 { value }
     }
 }
