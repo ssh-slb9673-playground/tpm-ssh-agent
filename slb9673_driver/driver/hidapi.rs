@@ -13,20 +13,15 @@ pub struct MCP2221A {
 
 impl MCP2221A {
     pub fn new(i2c_addr: u8) -> TpmResult<MCP2221A> {
-        match hidapi::HidApi::new() {
-            Ok(api) => match api.open(0x04d8, 0x00dd) {
-                Ok(device) => Ok(MCP2221A {
-                    device,
-                    i2c_addr_write: (i2c_addr << 1) | 1,
-                    i2c_addr_read: i2c_addr << 1,
-                }),
-                Err(e) => Err(Error::DriverError(Box::new(e))),
-            },
-            Err(e) => Err(Error::DriverError(Box::new(e))),
-        }
+        let device = hidapi::HidApi::new()?.open(0x04d8, 0x00dd)?;
+        Ok(MCP2221A {
+            device,
+            i2c_addr_write: (i2c_addr << 1) | 1,
+            i2c_addr_read: i2c_addr << 1,
+        })
     }
 
-    pub fn wait_busy(&self) -> hidapi::HidResult<()> {
+    pub fn wait_busy(&self) -> TpmResult<()> {
         loop {
             self.device.write(&[0x10u8, 0, 0, 0, 0])?;
             let mut buf = [0u8; 65];
@@ -39,7 +34,7 @@ impl MCP2221A {
         Ok(())
     }
 
-    pub fn setup_i2c(&self) -> hidapi::HidResult<()> {
+    pub fn setup_i2c(&self) -> TpmResult<()> {
         self.device.write(&[0x10u8, 0, 0, 0, 0])?;
         let mut buf = [0u8; 65];
         self.device.read(&mut buf)?;
@@ -68,7 +63,6 @@ impl MCP2221A {
 impl I2CTpmAccessor for MCP2221A {
     fn initialize(&mut self) -> TpmResult<()> {
         self.setup_i2c()
-            .map_err(|x| Error::DriverError(Box::new(x)))
     }
 
     fn i2c_read(&mut self, read_buf: &mut [u8]) -> TpmResult<()> {
