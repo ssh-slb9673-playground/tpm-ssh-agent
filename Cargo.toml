@@ -13,10 +13,15 @@ path = "tpm_i2c/lib.rs"
 name = "slb9673_driver"
 path = "slb9673_driver/main.rs"
 
+[features]
+default = ["hidapi"]
+hidapi = ["dep:hidapi"]
+i2cdev = ["dep:i2cdev"]
+
 [dependencies]
 bitfield-struct = "0.5.2"
 bitflags = "2.3.3"
-hidapi = "2.4.1"
-i2cdev = "0.5.1"
+hidapi = { version = "2.4.1", optional = true }
+i2cdev = { version = "0.5.1", optional = true }
 num-derive = "0.4.0"
 num-traits = "0.2.16"

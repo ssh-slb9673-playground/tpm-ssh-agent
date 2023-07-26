@@ -21,7 +21,10 @@ macro_rules! driver_error {
     };
 }
 
+#[cfg(feature = "i2cdev")]
 driver_error!(i2cdev::linux::LinuxI2CError);
+
+#[cfg(feature = "hidapi")]
 driver_error!(hidapi::HidError);
 
 impl std::fmt::Display for Error {
