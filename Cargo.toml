@@ -5,6 +5,14 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+name = "tpm_i2c"
+path = "src/lib.rs"
+
+[[bin]]
+name = "slb9673_driver"
+path = "src/main.rs"
+
 [dependencies]
 bitfield-struct = "0.5.2"
 bitflags = "2.3.3"
