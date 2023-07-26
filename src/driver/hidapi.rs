@@ -9,6 +9,12 @@ const TPM_ADDR: u8 = 0x2e;
 const TPM_ADDR_W: u8 = (TPM_ADDR << 1) | 1;
 const TPM_ADDR_R: u8 = TPM_ADDR << 1;
 
+impl std::convert::From<hidapi::HidError> for Error {
+    fn from(err: hidapi::HidError) -> Error {
+        Error::HidApiError(err)
+    }
+}
+
 pub fn wait_busy(device: &hidapi::HidDevice) -> TpmResult<()> {
     loop {
         device.write(&[0x10u8, 0, 0, 0, 0])?;
@@ -48,6 +54,10 @@ pub fn setup_i2c(device: &hidapi::HidDevice) -> TpmResult<()> {
 }
 
 impl I2CTpmAccessor for hidapi::HidDevice {
+    fn initialize(&mut self) -> TpmResult<()> {
+        setup_i2c(self)
+    }
+
     fn i2c_read(&mut self, read_buf: &mut [u8]) -> TpmResult<()> {
         wait_busy(self)?;
         let read_size = read_buf.len();

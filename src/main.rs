@@ -34,24 +34,10 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl std::convert::From<i2cdev::linux::LinuxI2CError> for Error {
-    fn from(err: i2cdev::linux::LinuxI2CError) -> Error {
-        Error::LinuxI2CError(err)
-    }
-}
-
-impl std::convert::From<hidapi::HidError> for Error {
-    fn from(err: hidapi::HidError) -> Error {
-        Error::HidApiError(err)
-    }
-}
-
 fn main() -> TpmResult<()> {
     use crate::tpm::Tpm;
 
-    let api = hidapi::HidApi::new()?;
-    let device = api.open(0x04d8, 0x00dd)?;
-    driver::hidapi::setup_i2c(&device)?;
+    let device = hidapi::HidApi::new()?.open(0x04d8, 0x00dd)?;
     // let mut tpm = Tpm::new(Box::new(LinuxI2CDevice::new("/dev/i2c-9", 0x2e)?))?;
     let mut tpm = Tpm::new(Box::new(device))?;
     tpm.init()?;

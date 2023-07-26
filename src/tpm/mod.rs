@@ -65,6 +65,7 @@ pub struct TpmInterfaceCaps {
 }
 
 pub trait I2CTpmAccessor {
+    fn initialize(&mut self) -> TpmResult<()>;
     fn i2c_read(&mut self, read_buf: &mut [u8]) -> TpmResult<()>;
     fn i2c_write(&mut self, write_buf: &[u8]) -> TpmResult<()>;
 }
@@ -77,6 +78,7 @@ pub struct Tpm {
 impl Tpm {
     pub fn new(mut device: Box<dyn I2CTpmAccessor>) -> TpmResult<Tpm> {
         let mut read_buf = [0u8; 1];
+        device.initialize()?;
         device.i2c_write(&[0x00])?;
         device.i2c_read(&mut read_buf)?;
         Ok(Tpm {
