@@ -3,8 +3,8 @@ mod driver;
 fn main() -> tpm_i2c::TpmResult<()> {
     use tpm_i2c::tpm::Tpm;
 
-    let device = driver::hidapi::MCP2221A::new(0x2e)?;
-    let mut tpm = Tpm::new(Box::new(device))?;
+    let mut device = driver::hidapi::MCP2221A::new(0x2e)?;
+    let mut tpm = Tpm::new(&mut device)?;
     tpm.init()?;
 
     tpm.print_info()?;

@@ -4,10 +4,10 @@
 use crate::tpm::structure::{
     Tpm2Command, Tpm2CommandCode, TpmResponseCode, TpmStructureTag, TpmUint16,
 };
-use crate::tpm::{Tpm, TpmData, TpmError};
+use crate::tpm::{I2CTpmAccessor, Tpm, TpmData, TpmError};
 use crate::TpmResult;
 
-impl Tpm {
+impl<T: I2CTpmAccessor> Tpm<'_, T> {
     pub fn get_random(&mut self, len: u16) -> TpmResult<Vec<u8>> {
         if !self.request_locality(0)? {
             return Err(TpmError::LocalityReq(0).into());
