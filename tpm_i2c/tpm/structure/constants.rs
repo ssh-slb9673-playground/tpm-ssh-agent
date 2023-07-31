@@ -4,6 +4,69 @@ use crate::util::{p16be, p32be, u16be, u32be};
 use crate::TpmResult;
 use num_derive::{FromPrimitive, ToPrimitive};
 
+pub type TpmHandle = u32;
+
+macro_rules! set_tpm_data_codec {
+    ($type:ty, $enc:ident, $dec:ident) => {
+        impl TpmData for $type {
+            fn to_tpm(&self) -> Vec<u8> {
+                $enc(self)
+            }
+
+            fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+                $dec(v)
+            }
+        }
+    };
+}
+
+macro_rules! def_encoder {
+    ($name: ident, $enum_to_num: path, $num_to_vec: path) => {
+        fn $name<T>(_self: &T) -> Vec<u8>
+        where
+            T: num_traits::ToPrimitive,
+        {
+            $num_to_vec($enum_to_num(_self).unwrap()).to_vec()
+        }
+    };
+}
+
+macro_rules! def_decoder {
+    ($name: ident, $num_to_enum: path, $vec_to_num: path, $len: expr) => {
+        fn $name<T>(v: &[u8]) -> TpmResult<(T, &[u8])>
+        where
+            T: num_traits::FromPrimitive,
+        {
+            if v.len() < $len {
+                return Err(TpmError::Parse.into());
+            }
+
+            if let Some(x) = $num_to_enum($vec_to_num(&v[0..$len])) {
+                Ok((x, &v[$len..]))
+            } else {
+                Err(TpmError::Parse.into())
+            }
+        }
+    };
+
+    ($name: ident, $num_to_enum: path, 1) => {
+        fn $name<T>(v: &[u8]) -> TpmResult<(T, &[u8])>
+        where
+            T: num_traits::FromPrimitive,
+        {
+            if v.is_empty() {
+                return Err(TpmError::Parse.into());
+            }
+
+            if let Some(x) = $num_to_enum(v[0]) {
+                Ok((x, &v[1..]))
+            } else {
+                Err(TpmError::Parse.into())
+            }
+        }
+    };
+}
+
 #[derive(FromPrimitive, ToPrimitive, Debug)]
 #[repr(u16)]
 pub enum TpmStructureTag {
@@ -159,6 +222,12 @@ pub enum TpmiYesNo {
     Yes = 1,
 }
 
+#[derive(FromPrimitive, ToPrimitive, Debug)]
+#[repr(u32)]
+pub enum TpmPermanentHandle {
+    Password = 0x40000009,
+}
+
 fn encode_u8<T>(_self: &T) -> Vec<u8>
 where
     T: num_traits::ToPrimitive,
@@ -166,111 +235,16 @@ where
     vec![num_traits::ToPrimitive::to_u8(_self).unwrap()]
 }
 
-fn decode_u8<T>(v: &[u8]) -> TpmResult<(T, &[u8])>
-where
-    T: num_traits::FromPrimitive,
-{
-    if v.is_empty() {
-        return Err(TpmError::Parse.into());
-    }
+def_decoder!(decode_u8, num_traits::FromPrimitive::from_u8, 1);
+def_encoder!(encode_u16, num_traits::ToPrimitive::to_u16, p16be);
+def_decoder!(decode_u16, num_traits::FromPrimitive::from_u16, u16be, 2);
+def_encoder!(encode_u32, num_traits::ToPrimitive::to_u32, p32be);
+def_decoder!(decode_u32, num_traits::FromPrimitive::from_u32, u32be, 4);
 
-    if let Some(x) = num_traits::FromPrimitive::from_u8(v[0]) {
-        Ok((x, &v[1..]))
-    } else {
-        Err(TpmError::Parse.into())
-    }
-}
-
-fn encode_u16<T>(_self: &T) -> Vec<u8>
-where
-    T: num_traits::ToPrimitive,
-{
-    p16be(num_traits::ToPrimitive::to_u16(_self).unwrap()).to_vec()
-}
-
-fn decode_u16<T>(v: &[u8]) -> TpmResult<(T, &[u8])>
-where
-    T: num_traits::FromPrimitive,
-{
-    if v.len() < 2 {
-        return Err(TpmError::Parse.into());
-    }
-
-    if let Some(x) = num_traits::FromPrimitive::from_u16(u16be(&v[0..2])) {
-        Ok((x, &v[2..]))
-    } else {
-        Err(TpmError::Parse.into())
-    }
-}
-
-fn encode_u32<T>(_self: &T) -> Vec<u8>
-where
-    T: num_traits::ToPrimitive,
-{
-    p32be(num_traits::ToPrimitive::to_u32(_self).unwrap()).to_vec()
-}
-
-fn decode_u32<T>(v: &[u8]) -> TpmResult<(T, &[u8])>
-where
-    T: num_traits::FromPrimitive,
-{
-    if v.len() < 4 {
-        return Err(TpmError::Parse.into());
-    }
-
-    if let Some(x) = num_traits::FromPrimitive::from_u32(u32be(&v[0..4])) {
-        Ok((x, &v[4..]))
-    } else {
-        Err(TpmError::Parse.into())
-    }
-}
-
-impl TpmData for TpmStructureTag {
-    fn to_tpm(&self) -> Vec<u8> {
-        encode_u16(self)
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
-        decode_u16(v)
-    }
-}
-
-impl TpmData for TpmResponseCode {
-    fn to_tpm(&self) -> Vec<u8> {
-        encode_u32(self)
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
-        decode_u32(v)
-    }
-}
-
-impl TpmData for Tpm2CommandCode {
-    fn to_tpm(&self) -> Vec<u8> {
-        encode_u32(self)
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
-        decode_u32(v)
-    }
-}
-
-impl TpmData for TpmStartupType {
-    fn to_tpm(&self) -> Vec<u8> {
-        encode_u16(self)
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
-        decode_u16(v)
-    }
-}
-
-impl TpmData for TpmiYesNo {
-    fn to_tpm(&self) -> Vec<u8> {
-        encode_u8(self)
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
-        decode_u8(v)
-    }
-}
+set_tpm_data_codec!(TpmStructureTag, encode_u16, decode_u16);
+set_tpm_data_codec!(TpmResponseCode, encode_u32, decode_u32);
+set_tpm_data_codec!(Tpm2CommandCode, encode_u32, decode_u32);
+set_tpm_data_codec!(TpmStartupType, encode_u16, decode_u16);
+set_tpm_data_codec!(TpmiYesNo, encode_u8, decode_u8);
+set_tpm_data_codec!(TpmPermanentHandle, encode_u32, decode_u32);
+set_tpm_data_codec!(TpmHandle, encode_u32, decode_u32);

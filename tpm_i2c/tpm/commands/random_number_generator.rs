@@ -2,7 +2,7 @@
     Ref. [TCG TPM 2.0 Library Part3] Section 16. "Random Number Generator"
 */
 use crate::tpm::structure::{
-    Tpm2Command, Tpm2CommandCode, TpmResponseCode, TpmStructureTag, TpmUint16,
+    Tpm2BDigest, Tpm2Command, Tpm2CommandCode, TpmResponseCode, TpmStructureTag, TpmUint16,
 };
 use crate::tpm::{I2CTpmAccessor, Tpm, TpmData, TpmError};
 use crate::TpmResult;
@@ -21,9 +21,8 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
         if res.response_code != TpmResponseCode::Success {
             Err(TpmError::UnsuccessfulResponse(res.response_code).into())
         } else {
-            let (size, rand_bytes) = TpmUint16::from_tpm(&res.params)?;
-            assert_eq!(rand_bytes.len(), size.value as usize);
-            Ok(rand_bytes.to_vec())
+            let (buf, _) = Tpm2BDigest::from_tpm(&res.params)?;
+            Ok(buf.buffer)
         }
     }
 }

@@ -35,7 +35,7 @@ impl std::convert::From<TpmError> for Error {
     }
 }
 
-pub trait TpmData {
+pub trait TpmData: std::fmt::Debug {
     fn to_tpm(&self) -> Vec<u8>;
     fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])>
     where

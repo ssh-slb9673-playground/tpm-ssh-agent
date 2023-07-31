@@ -4,6 +4,7 @@ use crate::TpmResult;
 
 use crate::tpm::structure::constants::{Tpm2CommandCode, TpmResponseCode, TpmStructureTag};
 
+#[derive(Debug)]
 pub struct Tpm2Command {
     pub tag: TpmStructureTag,
     pub command_code: Tpm2CommandCode,
