@@ -1,28 +1,36 @@
 use crate::tpm::TpmData;
 use crate::tpm::TpmError;
-use crate::util::{p16be, u16be};
+use crate::util::{p16be, p32be, u16be, u32be};
 use crate::TpmResult;
 
-#[derive(Debug)]
-pub struct TpmUint16 {
-    pub value: u16,
-}
+macro_rules! define_tpm_codec {
+    ($name:ty, $enc:path, $dec:path, $len: expr) => {
+        impl TpmData for $name {
+            fn to_tpm(&self) -> Vec<u8> {
+                $enc(*self).to_vec()
+            }
 
-impl TpmUint16 {
-    pub fn new(value: u16) -> Self {
-        TpmUint16 { value }
-    }
+            fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+                if v.len() < $len {
+                    return Err(TpmError::Parse.into());
+                }
+                Ok(($dec(&v[0..2]), &v[2..]))
+            }
+        }
+    };
 }
-
-impl TpmData for TpmUint16 {
+impl TpmData for u8 {
     fn to_tpm(&self) -> Vec<u8> {
-        p16be(self.value).to_vec()
+        vec![*self]
     }
 
     fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
-        if v.len() < 2 {
+        if v.is_empty() {
             return Err(TpmError::Parse.into());
         }
-        Ok((TpmUint16::new(u16be(&v[0..2])), &v[2..]))
+        Ok((v[0], &v[1..]))
     }
 }
+
+define_tpm_codec!(u16, p16be, u16be, 2);
+define_tpm_codec!(u32, p32be, u32be, 4);

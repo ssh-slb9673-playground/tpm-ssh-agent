@@ -3,7 +3,7 @@ use crate::tpm::TpmError;
 use crate::util::{p16be, u16be};
 use crate::TpmResult;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tpm2BDigest {
     pub buffer: Vec<u8>,
 }
@@ -24,6 +24,12 @@ impl TpmData for Tpm2BDigest {
             },
             &v[(2 + len)..],
         ))
+    }
+}
+
+impl Tpm2BDigest {
+    pub fn new(v: &[u8]) -> Tpm2BDigest {
+        Tpm2BDigest { buffer: v.to_vec() }
     }
 }
 

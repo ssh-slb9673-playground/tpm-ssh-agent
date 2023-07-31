@@ -78,7 +78,21 @@ impl<'a, T: I2CTpmAccessor> Tpm<'a, T> {
         self.write_fifo(cmd.to_tpm().as_slice())?;
         sleep(Duration::from_millis(5));
         self.write_status(&i2c::TpmStatus::new().with_tpm_go(true))?;
-        structure::Tpm2Response::from_tpm(self.read_fifo()?.as_slice())
+        structure::Tpm2Response::from_tpm(self.read_fifo()?.as_slice(), 0)
+    }
+
+    pub(in crate::tpm) fn execute_with_session(
+        &mut self,
+        cmd: &Tpm2Command,
+        count_handles: usize,
+    ) -> TpmResult<structure::Tpm2Response> {
+        use std::thread::sleep;
+        use std::time::Duration;
+        self.request_locality(0)?;
+        self.write_fifo(cmd.to_tpm().as_slice())?;
+        sleep(Duration::from_millis(5));
+        self.write_status(&i2c::TpmStatus::new().with_tpm_go(true))?;
+        structure::Tpm2Response::from_tpm(self.read_fifo()?.as_slice(), count_handles)
     }
 
     pub fn init(&mut self) -> TpmResult<()> {
@@ -102,5 +116,48 @@ impl<'a, T: I2CTpmAccessor> Tpm<'a, T> {
         }
         self.release_locality()?;
         Ok(())
+    }
+}
+
+pub trait TpmDataVec {
+    fn to_tpm(&self) -> Vec<u8>;
+    fn from_tpm(v: &[u8], count: usize) -> TpmResult<(Self, &[u8])>
+    where
+        Self: Sized;
+}
+
+impl<T: TpmData> TpmDataVec for Vec<T> {
+    fn to_tpm(&self) -> Vec<u8> {
+        self.iter()
+            .map(|x| x.to_tpm())
+            .fold(vec![], |acc, x| [acc, x].concat())
+    }
+
+    fn from_tpm(_v: &[u8], count: usize) -> TpmResult<(Self, &[u8])>
+    where
+        Self: Sized,
+    {
+        let mut ret = vec![];
+        for _ in 1..count {
+            let (value, _v) = T::from_tpm(_v)?;
+            ret.push(value);
+        }
+
+        Ok((ret, _v))
+    }
+}
+
+impl TpmDataVec for Vec<Box<dyn TpmData>> {
+    fn to_tpm(&self) -> Vec<u8> {
+        self.iter()
+            .map(|x| x.to_tpm())
+            .fold(vec![], |acc, x| [acc, x].concat())
+    }
+
+    fn from_tpm(_v: &[u8], _count: usize) -> TpmResult<(Self, &[u8])>
+    where
+        Self: Sized,
+    {
+        panic!();
     }
 }

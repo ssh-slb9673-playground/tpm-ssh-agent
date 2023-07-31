@@ -2,7 +2,7 @@ use crate::tpm::structure::{Tpm2BAuth, Tpm2BNonce, TpmAttrSession, TpmHandle};
 use crate::tpm::TpmData;
 use crate::TpmResult;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmAuthCommand {
     pub session_handle: TpmHandle,
     pub nonce: Tpm2BNonce,
@@ -10,11 +10,27 @@ pub struct TpmAuthCommand {
     pub hmac: Tpm2BAuth,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmAuthResponse {
     pub nonce: Tpm2BNonce,
     pub session_attributes: TpmAttrSession,
     pub hmac: Tpm2BAuth,
+}
+
+impl TpmAuthCommand {
+    pub fn new(
+        session_handle: TpmHandle,
+        nonce: &[u8],
+        session_attributes: TpmAttrSession,
+        hmac: &[u8],
+    ) -> TpmAuthCommand {
+        TpmAuthCommand {
+            session_handle,
+            nonce: Tpm2BNonce::new(nonce),
+            session_attributes,
+            hmac: Tpm2BAuth::new(hmac),
+        }
+    }
 }
 
 impl TpmData for TpmAuthCommand {

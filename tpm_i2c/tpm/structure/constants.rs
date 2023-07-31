@@ -67,7 +67,7 @@ macro_rules! def_decoder {
     };
 }
 
-#[derive(FromPrimitive, ToPrimitive, Debug)]
+#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
 #[repr(u16)]
 pub enum TpmStructureTag {
     RspCommand = 0xc4,
@@ -247,4 +247,9 @@ set_tpm_data_codec!(Tpm2CommandCode, encode_u32, decode_u32);
 set_tpm_data_codec!(TpmStartupType, encode_u16, decode_u16);
 set_tpm_data_codec!(TpmiYesNo, encode_u8, decode_u8);
 set_tpm_data_codec!(TpmPermanentHandle, encode_u32, decode_u32);
-set_tpm_data_codec!(TpmHandle, encode_u32, decode_u32);
+
+impl From<TpmPermanentHandle> for TpmHandle {
+    fn from(handle: TpmPermanentHandle) -> TpmHandle {
+        handle as TpmHandle
+    }
+}
