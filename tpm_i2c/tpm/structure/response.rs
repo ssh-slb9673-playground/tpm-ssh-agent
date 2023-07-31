@@ -153,7 +153,11 @@ impl TpmData for TpmResponseCode {
         } else {
             let (code, v) = u32::from_tpm(v)?;
             Ok((
-                if (code >> 7) & 0b11 == 0 {
+                if code == 0 {
+                    TpmResponseCode::Success
+                } else if code == 0x1e {
+                    TpmResponseCode::BadTag
+                } else if (code >> 7) & 0b11 == 0 {
                     // TPM 1.2 Response Code
                     TpmResponseCode::TPM12(code)
                 } else if (code >> 7) & 1 == 0 {
@@ -207,8 +211,6 @@ impl Tpm2Response {
         let (tag, v) = TpmStructureTag::from_tpm(v)?;
         let (size, v) = u32::from_tpm(v)?;
         let (response_code, v) = TpmResponseCode::from_tpm(v)?;
-
-        println!("{:?}", response_code);
 
         if len != size {
             return Err(TpmError::Parse.into());

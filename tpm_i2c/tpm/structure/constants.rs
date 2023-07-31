@@ -36,8 +36,9 @@ pub enum TpmStructureTag {
 #[derive(FromPrimitive, ToPrimitive, Debug)]
 #[repr(u32)]
 pub enum Tpm2CommandCode {
-    Startup = 0x0144,
     SelfTest = 0x0143,
+    Startup = 0x0144,
+    Shutdown = 0x145,
     GetRandom = 0x017B,
 }
 

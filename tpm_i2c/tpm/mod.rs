@@ -1,6 +1,6 @@
 use crate::{Error, TpmResult};
 
-use structure::{Tpm2Command, TpmResponseCode, TpmResponseCodeFormat0, TpmStartupType, TpmiYesNo};
+use structure::{Tpm2Command, TpmResponseCode, TpmResponseCodeFormat0, TpmiYesNo};
 
 pub mod commands;
 mod i2c;
@@ -95,7 +95,7 @@ impl<'a, T: I2CTpmAccessor> Tpm<'a, T> {
         structure::Tpm2Response::from_tpm(self.read_fifo()?.as_slice(), count_handles)
     }
 
-    pub fn init(&mut self) -> TpmResult<()> {
+    pub fn init(&mut self, clear_state: bool) -> TpmResult<()> {
         let (tpm_vendor_id, tpm_device_id, tpm_revision_id) = self.read_identifiers()?;
         // For Infineon SLB9673 only
         assert_eq!(tpm_vendor_id, 0x15d1);
@@ -104,12 +104,12 @@ impl<'a, T: I2CTpmAccessor> Tpm<'a, T> {
         if !self.request_locality(0)? {
             return Err(TpmError::LocalityReq(0).into());
         }
-        let res = self.startup(TpmStartupType::Clear);
+        let res = self.startup(clear_state);
         if let Err(Error::TpmError(TpmError::UnsuccessfulResponse(TpmResponseCode::Error(
             TpmResponseCodeFormat0::Initialize,
         )))) = res
         {
-            println!("[*] TPM was already initialied");
+            println!("[*] TPM was already initialized");
         } else if res.is_err() {
             return res;
         } else {

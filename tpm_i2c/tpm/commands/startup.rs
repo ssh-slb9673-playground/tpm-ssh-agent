@@ -8,11 +8,32 @@ use crate::tpm::{I2CTpmAccessor, Tpm, TpmError};
 use crate::TpmResult;
 
 impl<T: I2CTpmAccessor> Tpm<'_, T> {
-    pub fn startup(&mut self, st: TpmStartupType) -> TpmResult<()> {
+    pub fn startup(&mut self, clear_state: bool) -> TpmResult<()> {
         let res = self.execute(&Tpm2Command::new(
             TpmStructureTag::NoSessions,
             Tpm2CommandCode::Startup,
-            vec![Box::new(st)],
+            vec![Box::new(if clear_state {
+                TpmStartupType::Clear
+            } else {
+                TpmStartupType::State
+            })],
+        ))?;
+        if res.response_code != TpmResponseCode::Success {
+            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn shutdown(&mut self, clear_state: bool) -> TpmResult<()> {
+        let res = self.execute(&Tpm2Command::new(
+            TpmStructureTag::NoSessions,
+            Tpm2CommandCode::Shutdown,
+            vec![Box::new(if clear_state {
+                TpmStartupType::Clear
+            } else {
+                TpmStartupType::State
+            })],
         ))?;
         if res.response_code != TpmResponseCode::Success {
             Err(TpmError::UnsuccessfulResponse(res.response_code).into())
