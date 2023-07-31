@@ -14,7 +14,7 @@ macro_rules! define_tpm_codec {
                 if v.len() < $len {
                     return Err(TpmError::Parse.into());
                 }
-                Ok(($dec(&v[0..2]), &v[2..]))
+                Ok(($dec(&v[0..$len]), &v[$len..]))
             }
         }
     };

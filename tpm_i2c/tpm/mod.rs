@@ -1,6 +1,6 @@
 use crate::{Error, TpmResult};
 
-use structure::{Tpm2Command, TpmResponseCode, TpmStartupType, TpmiYesNo};
+use structure::{Tpm2Command, TpmResponseCode, TpmResponseCodeFormat0, TpmStartupType, TpmiYesNo};
 
 pub mod commands;
 mod i2c;
@@ -105,8 +105,9 @@ impl<'a, T: I2CTpmAccessor> Tpm<'a, T> {
             return Err(TpmError::LocalityReq(0).into());
         }
         let res = self.startup(TpmStartupType::Clear);
-        if let Err(Error::TpmError(TpmError::UnsuccessfulResponse(TpmResponseCode::Initialize))) =
-            res
+        if let Err(Error::TpmError(TpmError::UnsuccessfulResponse(TpmResponseCode::Error(
+            TpmResponseCodeFormat0::Initialize,
+        )))) = res
         {
             println!("[*] TPM was already initialied");
         } else if res.is_err() {

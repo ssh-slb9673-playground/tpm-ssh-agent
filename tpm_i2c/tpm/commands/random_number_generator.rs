@@ -49,7 +49,6 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
         if res.response_code != TpmResponseCode::Success {
             Err(TpmError::UnsuccessfulResponse(res.response_code).into())
         } else {
-            dbg!(&res);
             let (buf, _) = Tpm2BDigest::from_tpm(&res.params)?;
             let response_session = &res.auth_area[0];
             Ok((buf.buffer, response_session.clone()))
