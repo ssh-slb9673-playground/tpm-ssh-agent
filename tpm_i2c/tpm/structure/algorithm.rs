@@ -1,6 +1,7 @@
 use crate::tpm::structure::macro_defs::set_tpm_data_codec;
 use crate::tpm::structure::{
-    pack_enum_to_u32, unpack_u32_to_enum, Tpm2BAuth, Tpm2BDigest, Tpm2BSensitiveData, TpmAttrObject,
+    pack_enum_to_u32, unpack_u32_to_enum, Tpm2BAuth, Tpm2BDigest, Tpm2BSensitiveData,
+    TpmAttrObject, TpmKeyBits,
 };
 use crate::tpm::TpmData;
 use crate::TpmResult;
@@ -46,6 +47,18 @@ pub enum TpmAlgorithmIdentifier {
     Sha384 = 0x000c,
     #[subenum(TpmiAlgorithmHash, TpmiAlgorithmMacScheme)]
     Sha512 = 0x000d,
+    #[subenum(
+        TpmiAlgorithmAsymmetric,
+        TpmiAlgorithmHash,
+        TpmiAlgorithmSymmetric,
+        TpmiAlgorithmSymObject,
+        TpmiAlgorithmSymMode,
+        TpmiAlgorithmKdf,
+        TpmiAlgorithmSigScheme,
+        TpmiAlgorithmEccKeyXchg,
+        TpmiAlgorithmMacScheme,
+        TpmiAlgorithmCipherMode
+    )]
     Null = 0x0010,
     #[subenum(TpmiAlgorithmHash, TpmiAlgorithmMacScheme)]
     Sm3_256 = 0x0012,
@@ -134,28 +147,28 @@ pub enum TpmAlgorithmType {
     Object,
 }
 
-/*
 #[derive(Debug)]
 pub struct TpmsSensitiveCreate {
     user_auth: Tpm2BAuth,
     data: Tpm2BSensitiveData,
 }
+
 #[derive(Debug)]
 pub struct TpmtPublic {
     algorithm_type: TpmiAlgorithmSymObject,
     algorithm_name: TpmiAlgorithmHash,
     object_attributes: TpmAttrObject,
     auth_policy: Tpm2BDigest,
-    parameters: TpmuPublicParams,
-    unique: TpmuPublicIdentifier,
+    //parameters: TpmuPublicParams,
+    //unique: TpmuPublicIdentifier,
 }
 
 #[derive(Debug)]
 pub enum TpmuPublicParams {
     // keydeHashDetail
     SymDetail(TpmsSymcipherParams),
-    RsaDetail(TpmsRsaParams, TpmsAsymParams),
-    EccDetail(TpmsEccParams, TpmsAsymParams),
+    // RsaDetail(TpmsRsaParams, TpmsAsymParams),
+    // EccDetail(TpmsEccParams, TpmsAsymParams),
 }
 
 #[derive(Debug)]
@@ -165,18 +178,32 @@ pub struct TpmsSymcipherParams {
 
 #[derive(Debug)]
 pub struct TpmtSymdefObject {
-    algorithm: TpmAlgorithmIdentifier, // must be TpmAlgorithmType::Symmetric
+    algorithm: TpmiAlgorithmSymmetric,
     key_bits: TpmuSymKeybits,
     mode: TpmuSymMode,
-    details: TpmuSymDetails,
+    // details: TpmuSymDetails, <- see [TPM 2.0 Library Part 2, Section 11.1.6] Table 140
 }
 
 #[derive(Debug)]
 pub enum TpmuSymKeybits {
-    SymmetricAlgo(TpmAlgorithmIdentifier, u32),
-    Xor(TpmAlgorithmIdentifier),
+    SymmetricAlgo(TpmiAlgorithmSymObject, TpmKeyBits),
+    Xor(TpmiAlgorithmHash),
+    Null,
 }
-*/
+
+#[derive(Debug)]
+pub enum TpmuSymMode {
+    SymmetricAlgo(TpmiAlgorithmSymmetric, TpmiAlgorithmSymMode),
+    Xor,
+    Null,
+}
+
+#[derive(Debug)]
+pub enum TpmuSymDetails {
+    SymmetricAlgo(TpmiAlgorithmSymmetric),
+    Xor,
+    Null,
+}
 
 pub trait TpmAlgorithm {
     fn get_type(&self) -> HashSet<TpmAlgorithmType>;
@@ -234,7 +261,6 @@ impl TpmAlgorithm for TpmAlgorithmIdentifier {
     }
 }
 
-/*
 impl TpmData for TpmsSensitiveCreate {
     fn to_tpm(&self) -> Vec<u8> {
         [self.user_auth.to_tpm(), self.data.to_tpm()].concat()
@@ -246,7 +272,6 @@ impl TpmData for TpmsSensitiveCreate {
         Ok((TpmsSensitiveCreate { user_auth, data }, v))
     }
 }
-*/
 
 macro_rules! impl_subenums {
     ($name:ident) => {
@@ -279,13 +304,14 @@ mod test {
     };
     use crate::tpm::TpmData;
     use enum_iterator::all;
+    use num_traits::ToPrimitive;
     use std::collections::HashSet;
 
     fn test_algo_with_except<T>(
         target: &HashSet<TpmAlgorithmType>,
         except: &HashSet<TpmAlgorithmIdentifier>,
     ) where
-        T: enum_iterator::Sequence + TpmData + TpmAlgorithm,
+        T: enum_iterator::Sequence + TpmData + TpmAlgorithm + ToPrimitive,
     {
         let algorithms = all::<T>()
             .into_iter()
@@ -294,26 +320,32 @@ mod test {
         let except_tpm: HashSet<Vec<u8>> =
             HashSet::from_iter(except.into_iter().map(|x| x.to_tpm()));
         for x in all::<TpmAlgorithmIdentifier>() {
+            if x.to_u32().unwrap() == 0x10 {
+                continue;
+            }
             if &x.get_type() == target {
                 assert!(algorithms.contains(&x.to_tpm()) || except_tpm.contains(&x.to_tpm()));
             }
         }
 
         for x in all::<T>() {
+            if x.to_u32().unwrap() == 0x10 {
+                continue;
+            }
             assert!(&x.get_type() == target || except_tpm.contains(&x.to_tpm()));
         }
     }
 
     fn test_algo<T>(target: &HashSet<TpmAlgorithmType>)
     where
-        T: enum_iterator::Sequence + TpmData + TpmAlgorithm,
+        T: enum_iterator::Sequence + TpmData + TpmAlgorithm + ToPrimitive,
     {
         test_algo_with_except::<T>(target, &HashSet::new())
     }
 
     fn test_algo_or<T>(target1: &HashSet<TpmAlgorithmType>, target2: &HashSet<TpmAlgorithmType>)
     where
-        T: enum_iterator::Sequence + TpmData + TpmAlgorithm,
+        T: enum_iterator::Sequence + TpmData + TpmAlgorithm + ToPrimitive,
     {
         let algorithms = all::<T>()
             .into_iter()
@@ -321,6 +353,9 @@ mod test {
             .collect::<Vec<_>>();
 
         for x in all::<TpmAlgorithmIdentifier>() {
+            if x.to_u32().unwrap() == 0x10 {
+                continue;
+            }
             if &x.get_type() == target1 {
                 assert!(algorithms.contains(&x.to_tpm()));
             } else if &x.get_type() == target2 {
@@ -329,25 +364,34 @@ mod test {
         }
 
         for x in all::<T>() {
+            if x.to_u32().unwrap() == 0x10 {
+                continue;
+            }
             assert!(&x.get_type() == target1 || &x.get_type() == target2);
         }
     }
 
     fn test_algo_least<T>(target: &HashSet<TpmAlgorithmType>)
     where
-        T: enum_iterator::Sequence + TpmData + TpmAlgorithm,
+        T: enum_iterator::Sequence + TpmData + TpmAlgorithm + ToPrimitive,
     {
         let algorithms = all::<T>()
             .into_iter()
             .map(|x| x.to_tpm())
             .collect::<Vec<_>>();
         for x in all::<TpmAlgorithmIdentifier>() {
+            if x.to_u32().unwrap() == 0x10 {
+                continue;
+            }
             if target.is_subset(&x.get_type()) {
                 assert!(algorithms.contains(&x.to_tpm()));
             }
         }
 
         for x in all::<T>() {
+            if x.to_u32().unwrap() == 0x10 {
+                continue;
+            }
             assert!(target.is_subset(&x.get_type()));
         }
     }

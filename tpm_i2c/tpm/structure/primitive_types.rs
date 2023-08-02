@@ -34,3 +34,9 @@ impl TpmData for u8 {
 
 define_tpm_codec!(u16, p16be, u16be, 2);
 define_tpm_codec!(u32, p32be, u32be, 4);
+
+pub type TpmModifierIndicator = u32;
+pub type TpmAuthorizationSize = u32;
+pub type TpmParameterSize = u32;
+pub type TpmKeySize = u16;
+pub type TpmKeyBits = u16;
