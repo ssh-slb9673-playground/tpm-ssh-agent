@@ -123,7 +123,7 @@ where
     if let Some(x) = num_traits::FromPrimitive::from_u32(v) {
         Ok(x)
     } else {
-        Err(TpmError::Parse.into())
+        Err(TpmError::create_parse_error(&format!("invalid value specified: {}", v)).into())
     }
 }
 
@@ -149,7 +149,7 @@ impl TpmData for TpmResponseCode {
     fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
         // Reference: TPM 2.0 Specification Part 1: Figure 27
         if v.len() < 4 {
-            Err(TpmError::Parse.into())
+            Err(TpmError::create_parse_error("length mismatch").into())
         } else {
             let (code, v) = u32::from_tpm(v)?;
             Ok((
@@ -205,7 +205,7 @@ impl Tpm2Response {
     pub fn from_tpm(v: &[u8], handles_count: usize) -> TpmResult<Tpm2Response> {
         // len(v) must be larger than len(tag + response_size + response_code)
         if v.len() < 10 {
-            return Err(TpmError::Parse.into());
+            return Err(TpmError::create_parse_error("length mismatch").into());
         }
         let len = v.len() as u32;
         let (tag, v) = TpmStructureTag::from_tpm(v)?;
@@ -213,7 +213,7 @@ impl Tpm2Response {
         let (response_code, v) = TpmResponseCode::from_tpm(v)?;
 
         if len != size {
-            return Err(TpmError::Parse.into());
+            return Err(TpmError::create_parse_error("length mismatch").into());
         }
 
         if tag == TpmStructureTag::Sessions {

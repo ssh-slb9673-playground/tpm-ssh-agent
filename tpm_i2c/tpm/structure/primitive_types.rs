@@ -12,7 +12,7 @@ macro_rules! define_tpm_codec {
 
             fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
                 if v.len() < $len {
-                    return Err(TpmError::Parse.into());
+                    return Err(TpmError::create_parse_error("length mismatch").into());
                 }
                 Ok(($dec(&v[0..$len]), &v[$len..]))
             }
@@ -26,7 +26,7 @@ impl TpmData for u8 {
 
     fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
         if v.is_empty() {
-            return Err(TpmError::Parse.into());
+            return Err(TpmError::create_parse_error("length mismatch").into());
         }
         Ok((v[0], &v[1..]))
     }

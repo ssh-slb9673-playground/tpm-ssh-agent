@@ -15,7 +15,7 @@ impl TpmData for Tpm2BDigest {
 
     fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
         if v.len() < 2 {
-            return Err(TpmError::Parse.into());
+            return Err(TpmError::create_parse_error("Length mismatch").into());
         }
         let len = u16be(&v[0..2]) as usize;
         Ok((
@@ -35,3 +35,5 @@ impl Tpm2BDigest {
 
 pub type Tpm2BNonce = Tpm2BDigest;
 pub type Tpm2BAuth = Tpm2BDigest;
+pub type Tpm2BEncryptedSecret = Tpm2BDigest;
+pub type Tpm2BSensitiveData = Tpm2BDigest;

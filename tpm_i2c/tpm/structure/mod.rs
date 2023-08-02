@@ -1,16 +1,20 @@
+mod algorithm;
 mod attributes;
 mod authorization;
 mod buffers;
 mod command;
 mod constants;
+mod interface;
 mod macro_defs;
 mod primitive_types;
 mod response;
 
+pub use algorithm::*;
 pub use attributes::*;
 pub use authorization::*;
 pub use buffers::*;
 pub use command::*;
 pub use constants::*;
+pub use interface::*;
 pub use primitive_types::*;
 pub use response::*;

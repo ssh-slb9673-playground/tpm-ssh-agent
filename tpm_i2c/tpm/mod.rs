@@ -1,4 +1,5 @@
 use crate::{Error, TpmResult};
+use std::backtrace::Backtrace;
 
 use structure::{Tpm2Command, TpmResponseCode, TpmResponseCodeFormat0, TpmiYesNo};
 
@@ -9,17 +10,33 @@ pub mod structure;
 #[derive(Debug)]
 pub enum TpmError {
     UnsuccessfulResponse(structure::TpmResponseCode),
-    Parse,
+    Parse(Backtrace, String),
+    InvalidAlgorithmType(structure::TpmAlgorithmType, structure::TpmAlgorithmType),
     Busy,
     Unreadable,
     LocalityReq(u8),
+}
+
+impl TpmError {
+    fn create_parse_error(details: &str) -> TpmError {
+        TpmError::Parse(Backtrace::capture(), details.to_string())
+    }
 }
 
 impl std::fmt::Display for TpmError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match &self {
             TpmError::UnsuccessfulResponse(rc) => write!(f, "Unsuccessful Result: RC = {:?}", rc),
-            TpmError::Parse => write!(f, "TPM Parse"),
+            TpmError::Parse(bt, details) => {
+                write!(f, "TPM Parse: {}\nStacktrace: {:?}", details, bt)
+            }
+            TpmError::InvalidAlgorithmType(expected, actual) => {
+                write!(
+                    f,
+                    "TPM Invalid Algorithm Type (expected: {:?}, actual: {:?})",
+                    expected, actual
+                )
+            }
             TpmError::Busy => write!(f, "TPM Busy"),
             TpmError::Unreadable => write!(f, "TPM Unreadable"),
             TpmError::LocalityReq(n) => write!(f, "Can't get control of locality {}", n),

@@ -16,7 +16,7 @@ macro_rules! set_tpm_data_codec {
 #[macro_export]
 macro_rules! def_encoder {
     ($name: ident, $enum_to_num: path, $num_to_vec: path) => {
-        fn $name<T>(_self: &T) -> Vec<u8>
+        pub(super) fn $name<T>(_self: &T) -> Vec<u8>
         where
             T: num_traits::ToPrimitive,
         {
@@ -28,35 +28,42 @@ macro_rules! def_encoder {
 #[macro_export]
 macro_rules! def_decoder {
     ($name: ident, $num_to_enum: path, $vec_to_num: path, $len: expr) => {
-        fn $name<T>(v: &[u8]) -> TpmResult<(T, &[u8])>
+        pub(super) fn $name<T>(v: &[u8]) -> TpmResult<(T, &[u8])>
         where
             T: num_traits::FromPrimitive,
         {
             if v.len() < $len {
-                return Err(TpmError::Parse.into());
+                return Err(TpmError::create_parse_error("length mismatch").into());
             }
 
             if let Some(x) = $num_to_enum($vec_to_num(&v[0..$len])) {
                 Ok((x, &v[$len..]))
             } else {
-                Err(TpmError::Parse.into())
+                Err(TpmError::create_parse_error(&format!(
+                    "invalid value specified: {:?}",
+                    &v[0..$len]
+                ))
+                .into())
             }
         }
     };
 
     ($name: ident, $num_to_enum: path, 1) => {
-        fn $name<T>(v: &[u8]) -> TpmResult<(T, &[u8])>
+        pub(super) fn $name<T>(v: &[u8]) -> TpmResult<(T, &[u8])>
         where
             T: num_traits::FromPrimitive,
         {
             if v.is_empty() {
-                return Err(TpmError::Parse.into());
+                return Err(TpmError::create_parse_error("length mismatch").into());
             }
 
             if let Some(x) = $num_to_enum(v[0]) {
                 Ok((x, &v[1..]))
             } else {
-                Err(TpmError::Parse.into())
+                Err(
+                    TpmError::create_parse_error(&format!("invalid value specified: {:?}", v[0]))
+                        .into(),
+                )
             }
         }
     };
