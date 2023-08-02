@@ -1,4 +1,4 @@
-name: Rust lint & test
+name: Rust test
 
 on: [pull_request, push]
 
@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Install depends
-      run: apt-get update && apt-get install libhidapi-dev libudev-dev -y
+      run: sudo apt-get update && apt-get install libhidapi-dev libudev-dev -y
     - name: Checkout Crate
       uses: actions/checkout@v3
     - name: Set Toolchain
