@@ -81,3 +81,17 @@ impl TpmData for TpmAttrAlgorithm {
         }
     }
 }
+
+impl TpmData for TpmAttrObject {
+    fn to_tpm(&self) -> Vec<u8> {
+        p32be(self.0).to_vec()
+    }
+
+    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+        if v.is_empty() {
+            Err(TpmError::create_parse_error("length mismatch").into())
+        } else {
+            Ok((TpmAttrObject::from(u32be(&v[0..4])), &v[4..]))
+        }
+    }
+}

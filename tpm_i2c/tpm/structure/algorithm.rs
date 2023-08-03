@@ -1,8 +1,5 @@
 use crate::tpm::structure::macro_defs::set_tpm_data_codec;
-use crate::tpm::structure::{
-    pack_enum_to_u32, unpack_u32_to_enum, Tpm2BAuth, Tpm2BDigest, Tpm2BSensitiveData,
-    TpmAttrObject, TpmKeyBits,
-};
+use crate::tpm::structure::{pack_enum_to_u32, unpack_u32_to_enum};
 use crate::tpm::TpmData;
 use crate::TpmResult;
 use enum_iterator::Sequence;
@@ -21,13 +18,14 @@ use subenum::subenum;
     TpmiAlgorithmSigScheme, // !ALG.ax (<=> !ALG.AX + !ALG.ANX)
     TpmiAlgorithmEccKeyXchg, // !ALG.AM + TPM_ALG_SM2
     TpmiAlgorithmMacScheme, // !ALG.SX + !ALG.H
-    TpmiAlgorithmCipherMode // !ALG.SE
+    TpmiAlgorithmCipherMode, // !ALG.SE
+    TpmiAlgorithmPublic, // !ALG.o
 )]
 #[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq, Hash, Clone, Copy, Sequence)]
 #[repr(u16)]
 pub enum TpmAlgorithmIdentifier {
     Error = 0x0000,
-    #[subenum(TpmiAlgorithmAsymmetric)]
+    #[subenum(TpmiAlgorithmAsymmetric, TpmiAlgorithmPublic)]
     Rsa = 0x0001,
     #[subenum(TpmiAlgorithmSymmetric, TpmiAlgorithmSymObject)]
     TripleDes = 0x0003,
@@ -38,6 +36,7 @@ pub enum TpmAlgorithmIdentifier {
     Aes = 0x0006,
     #[subenum(TpmiAlgorithmKdf)]
     Mgf1 = 0x0007,
+    #[subenum(TpmiAlgorithmPublic)]
     KeyedHash = 0x0008,
     #[subenum(TpmiAlgorithmSymmetric)]
     Xor = 0x000a,
@@ -88,8 +87,9 @@ pub enum TpmAlgorithmIdentifier {
     Kdf2 = 0x0021,
     #[subenum(TpmiAlgorithmKdf)]
     Kdf1Sp800_108 = 0x0022,
-    #[subenum(TpmiAlgorithmAsymmetric)]
+    #[subenum(TpmiAlgorithmAsymmetric, TpmiAlgorithmPublic)]
     Ecc = 0x0023,
+    #[subenum(TpmiAlgorithmPublic)]
     SymCipher = 0x0025,
     #[subenum(TpmiAlgorithmSymmetric, TpmiAlgorithmSymObject)]
     Camellia = 0x0026,
@@ -134,6 +134,7 @@ set_tpm_data_codec!(
     pack_enum_to_u32,
     unpack_u32_to_enum
 );
+set_tpm_data_codec!(TpmiAlgorithmPublic, pack_enum_to_u32, unpack_u32_to_enum);
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum TpmAlgorithmType {
@@ -145,64 +146,6 @@ pub enum TpmAlgorithmType {
     Encryption,
     MaskGeneration,
     Object,
-}
-
-#[derive(Debug)]
-pub struct TpmsSensitiveCreate {
-    user_auth: Tpm2BAuth,
-    data: Tpm2BSensitiveData,
-}
-
-#[derive(Debug)]
-pub struct TpmtPublic {
-    algorithm_type: TpmiAlgorithmSymObject,
-    algorithm_name: TpmiAlgorithmHash,
-    object_attributes: TpmAttrObject,
-    auth_policy: Tpm2BDigest,
-    //parameters: TpmuPublicParams,
-    //unique: TpmuPublicIdentifier,
-}
-
-#[derive(Debug)]
-pub enum TpmuPublicParams {
-    // keydeHashDetail
-    SymDetail(TpmsSymcipherParams),
-    // RsaDetail(TpmsRsaParams, TpmsAsymParams),
-    // EccDetail(TpmsEccParams, TpmsAsymParams),
-}
-
-#[derive(Debug)]
-pub struct TpmsSymcipherParams {
-    sym: TpmtSymdefObject,
-}
-
-#[derive(Debug)]
-pub struct TpmtSymdefObject {
-    algorithm: TpmiAlgorithmSymmetric,
-    key_bits: TpmuSymKeybits,
-    mode: TpmuSymMode,
-    // details: TpmuSymDetails, <- see [TPM 2.0 Library Part 2, Section 11.1.6] Table 140
-}
-
-#[derive(Debug)]
-pub enum TpmuSymKeybits {
-    SymmetricAlgo(TpmiAlgorithmSymObject, TpmKeyBits),
-    Xor(TpmiAlgorithmHash),
-    Null,
-}
-
-#[derive(Debug)]
-pub enum TpmuSymMode {
-    SymmetricAlgo(TpmiAlgorithmSymmetric, TpmiAlgorithmSymMode),
-    Xor,
-    Null,
-}
-
-#[derive(Debug)]
-pub enum TpmuSymDetails {
-    SymmetricAlgo(TpmiAlgorithmSymmetric),
-    Xor,
-    Null,
 }
 
 pub trait TpmAlgorithm {
@@ -261,18 +204,6 @@ impl TpmAlgorithm for TpmAlgorithmIdentifier {
     }
 }
 
-impl TpmData for TpmsSensitiveCreate {
-    fn to_tpm(&self) -> Vec<u8> {
-        [self.user_auth.to_tpm(), self.data.to_tpm()].concat()
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
-        let (user_auth, v) = Tpm2BAuth::from_tpm(v)?;
-        let (data, v) = Tpm2BSensitiveData::from_tpm(v)?;
-        Ok((TpmsSensitiveCreate { user_auth, data }, v))
-    }
-}
-
 macro_rules! impl_subenums {
     ($name:ident) => {
         impl TpmAlgorithm for $name {
@@ -293,13 +224,14 @@ impl_subenums!(TpmiAlgorithmSigScheme);
 impl_subenums!(TpmiAlgorithmEccKeyXchg);
 impl_subenums!(TpmiAlgorithmMacScheme);
 impl_subenums!(TpmiAlgorithmCipherMode);
+impl_subenums!(TpmiAlgorithmPublic);
 
 #[cfg(test)]
 mod test {
     use crate::tpm::structure::{
         TpmAlgorithm, TpmAlgorithmIdentifier, TpmAlgorithmType, TpmiAlgorithmAsymmetric,
         TpmiAlgorithmCipherMode, TpmiAlgorithmEccKeyXchg, TpmiAlgorithmHash, TpmiAlgorithmKdf,
-        TpmiAlgorithmMacScheme, TpmiAlgorithmSigScheme, TpmiAlgorithmSymMode,
+        TpmiAlgorithmMacScheme, TpmiAlgorithmPublic, TpmiAlgorithmSigScheme, TpmiAlgorithmSymMode,
         TpmiAlgorithmSymObject, TpmiAlgorithmSymmetric,
     };
     use crate::tpm::TpmData;
@@ -471,5 +403,10 @@ mod test {
             TpmAlgorithmType::Asymmetric,
             TpmAlgorithmType::Signing,
         ]));
+    }
+
+    #[test]
+    fn test_public() {
+        test_algo_least::<TpmiAlgorithmPublic>(&HashSet::from([TpmAlgorithmType::Object]));
     }
 }

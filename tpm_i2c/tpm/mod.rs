@@ -59,6 +59,13 @@ pub trait TpmData: std::fmt::Debug {
         Self: Sized;
 }
 
+pub trait TpmDataWithSelector<T>: std::fmt::Debug {
+    fn to_tpm(&self) -> Vec<u8>;
+    fn from_tpm<'a>(v: &'a [u8], selector: &T) -> TpmResult<(Self, &'a [u8])>
+    where
+        Self: Sized;
+}
+
 pub trait I2CTpmAccessor {
     fn initialize(&mut self) -> TpmResult<()>;
     fn i2c_read(&mut self, read_buf: &mut [u8]) -> TpmResult<()>;

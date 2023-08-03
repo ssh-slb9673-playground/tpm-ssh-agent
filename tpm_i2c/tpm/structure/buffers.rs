@@ -37,3 +37,6 @@ pub type Tpm2BNonce = Tpm2BDigest;
 pub type Tpm2BAuth = Tpm2BDigest;
 pub type Tpm2BEncryptedSecret = Tpm2BDigest;
 pub type Tpm2BSensitiveData = Tpm2BDigest;
+pub type Tpm2BPublicKeyRsa = Tpm2BDigest;
+pub type Tpm2BPrivateKeyRsa = Tpm2BDigest;
+pub type Tpm2BEccParameter = Tpm2BDigest;
