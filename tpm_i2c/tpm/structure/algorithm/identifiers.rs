@@ -21,6 +21,7 @@ use subenum::subenum;
     TpmiAlgorithmCipherMode, // !ALG.SE
     TpmiAlgorithmPublic, // !ALG.o
     TpmiAlgorithmAsymmetricScheme, // !ALG.am + !ALG.ax + !ALG.ae
+    TpmiAlgorithmRsaScheme, // In specification: !ALG.ae + !ALG.ax but I used tpm2-tss's definition (RSA-related definition)
 )]
 #[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq, Hash, Clone, Copy, Sequence)]
 #[repr(u16)]
@@ -57,20 +58,31 @@ pub enum TpmAlgorithmIdentifier {
         TpmiAlgorithmSigScheme,
         TpmiAlgorithmEccKeyXchg,
         TpmiAlgorithmMacScheme,
-        TpmiAlgorithmCipherMode
+        TpmiAlgorithmCipherMode,
+        TpmiAlgorithmPublic,
+        TpmiAlgorithmAsymmetricScheme,
+        TpmiAlgorithmRsaScheme
     )]
     Null = 0x0010,
     #[subenum(TpmiAlgorithmHash, TpmiAlgorithmMacScheme)]
     Sm3_256 = 0x0012,
     #[subenum(TpmiAlgorithmSymmetric, TpmiAlgorithmSymObject)]
     Sm4 = 0x0013,
-    #[subenum(TpmiAlgorithmSigScheme, TpmiAlgorithmAsymmetricScheme)]
+    #[subenum(
+        TpmiAlgorithmSigScheme,
+        TpmiAlgorithmAsymmetricScheme,
+        TpmiAlgorithmRsaScheme
+    )]
     RsaSsa = 0x0014,
-    #[subenum(TpmiAlgorithmAsymmetricScheme)]
+    #[subenum(TpmiAlgorithmAsymmetricScheme, TpmiAlgorithmRsaScheme)]
     RsaEs = 0x0015,
-    #[subenum(TpmiAlgorithmSigScheme, TpmiAlgorithmAsymmetricScheme)]
+    #[subenum(
+        TpmiAlgorithmSigScheme,
+        TpmiAlgorithmAsymmetricScheme,
+        TpmiAlgorithmRsaScheme
+    )]
     RsaPss = 0x0016,
-    #[subenum(TpmiAlgorithmAsymmetricScheme)]
+    #[subenum(TpmiAlgorithmAsymmetricScheme, TpmiAlgorithmRsaScheme)]
     Oaep = 0x0017,
     #[subenum(TpmiAlgorithmSigScheme, TpmiAlgorithmAsymmetricScheme)]
     EcDsa = 0x0018,
@@ -147,6 +159,7 @@ set_tpm_data_codec!(
     pack_enum_to_u32,
     unpack_u32_to_enum
 );
+set_tpm_data_codec!(TpmiAlgorithmRsaScheme, pack_enum_to_u32, unpack_u32_to_enum);
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum TpmAlgorithmType {
@@ -238,6 +251,7 @@ impl_subenums!(TpmiAlgorithmMacScheme);
 impl_subenums!(TpmiAlgorithmCipherMode);
 impl_subenums!(TpmiAlgorithmPublic);
 impl_subenums!(TpmiAlgorithmAsymmetricScheme);
+impl_subenums!(TpmiAlgorithmRsaScheme);
 
 #[cfg(test)]
 mod test {
@@ -425,7 +439,7 @@ mod test {
     }
 
     #[test]
-    fn test_macsch() {
+    fn test_mac_scheme() {
         let target1 = HashSet::from([TpmAlgorithmType::Hash]); // !ALG.H
         let target2 = HashSet::from([TpmAlgorithmType::Symmetric, TpmAlgorithmType::Signing]); // !ALG.SX
 
@@ -442,7 +456,7 @@ mod test {
     }
 
     #[test]
-    fn test_sigsch() {
+    fn test_sig_scheme() {
         test_algo_least::<crate::tpm::structure::TpmiAlgorithmSigScheme>(&HashSet::from([
             TpmAlgorithmType::Asymmetric,
             TpmAlgorithmType::Signing,
@@ -477,6 +491,19 @@ mod test {
         assert_eq!(
             to_set::<crate::tpm::structure::TpmiAlgorithmAsymmetricScheme>(),
             extracted
+        );
+    }
+
+    #[test]
+    fn test_rsa_scheme() {
+        assert_eq!(
+            to_set::<crate::tpm::structure::TpmiAlgorithmRsaScheme>(),
+            HashSet::from([
+                TpmAlgorithmIdentifier::RsaEs,
+                TpmAlgorithmIdentifier::Oaep,
+                TpmAlgorithmIdentifier::RsaSsa,
+                TpmAlgorithmIdentifier::RsaPss,
+            ])
         );
     }
 }

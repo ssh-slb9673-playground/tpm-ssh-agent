@@ -35,6 +35,25 @@ impl TpmData for u8 {
 define_tpm_codec!(u16, p16be, u16be, 2);
 define_tpm_codec!(u32, p32be, u32be, 4);
 
+#[derive(Debug)]
+pub struct TpmsEmpty;
+
+impl TpmData for TpmsEmpty {
+    fn to_tpm(&self) -> Vec<u8> {
+        vec![]
+    }
+
+    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+        Ok((TpmsEmpty {}, v))
+    }
+}
+
+impl TpmsEmpty {
+    pub fn new() -> Self {
+        TpmsEmpty {}
+    }
+}
+
 pub type TpmModifierIndicator = u32;
 pub type TpmAuthorizationSize = u32;
 pub type TpmParameterSize = u32;
