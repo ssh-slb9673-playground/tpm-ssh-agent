@@ -1,7 +1,10 @@
 mod driver;
 
 fn main() -> tpm_i2c::TpmResult<()> {
-    use tpm_i2c::tpm::structure::{TpmAttrSession, TpmAuthCommand, TpmPermanentHandle};
+    use tpm_i2c::tpm::structure::{
+        TpmiAlgorithmPublic, TpmiAlgorithmSymMode, TpmiAlgorithmSymmetric, TpmsSymcipherParams,
+        TpmtPublicParams, TpmtSymdefObject, TpmuPublicParams, TpmuSymKeybits, TpmuSymMode,
+    };
     use tpm_i2c::tpm::Tpm;
 
     let mut device = driver::hidapi::MCP2221A::new(0x2e)?;
@@ -10,12 +13,19 @@ fn main() -> tpm_i2c::TpmResult<()> {
 
     tpm.print_info()?;
 
-    let _auth = TpmAuthCommand::new(
-        TpmPermanentHandle::Password.into(),
-        &[],
-        TpmAttrSession::new().with_continue_session(true),
-        &[0x41, 0x42, 0x43],
-    );
+    dbg!(tpm.test_params(TpmtPublicParams {
+        algorithm_type: TpmiAlgorithmPublic::SymCipher,
+        parameters: TpmuPublicParams::SymDetail(TpmsSymcipherParams {
+            sym: TpmtSymdefObject {
+                algorithm: TpmiAlgorithmSymmetric::Aes,
+                key_bits: TpmuSymKeybits::SymmetricAlgo(TpmiAlgorithmSymmetric::Aes, 128),
+                mode: TpmuSymMode::SymmetricAlgo(
+                    TpmiAlgorithmSymmetric::Aes,
+                    TpmiAlgorithmSymMode::CBC,
+                ),
+            },
+        }),
+    })?);
 
     // println!("{:?}", tpm.read_status()?);
 

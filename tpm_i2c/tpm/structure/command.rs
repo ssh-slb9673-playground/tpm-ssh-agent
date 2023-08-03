@@ -1,4 +1,4 @@
-use crate::tpm::{TpmData, TpmDataVec};
+use crate::tpm::{ToTpm, TpmDataVec};
 use crate::util::p32be;
 
 use crate::tpm::structure::{Tpm2CommandCode, TpmAuthCommand, TpmHandle, TpmStructureTag};
@@ -9,14 +9,14 @@ pub struct Tpm2Command {
     pub command_code: Tpm2CommandCode,
     pub handles: Vec<TpmHandle>,
     pub auth_area: Vec<TpmAuthCommand>,
-    pub params: Vec<Box<dyn TpmData>>,
+    pub params: Vec<Box<dyn ToTpm>>,
 }
 
 impl Tpm2Command {
     pub fn new(
         tag: TpmStructureTag,
         command_code: Tpm2CommandCode,
-        params: Vec<Box<dyn TpmData>>,
+        params: Vec<Box<dyn ToTpm>>,
     ) -> Self {
         Tpm2Command {
             tag,
@@ -32,7 +32,7 @@ impl Tpm2Command {
         command_code: Tpm2CommandCode,
         handles: Vec<TpmHandle>,
         auth_area: Vec<TpmAuthCommand>,
-        params: Vec<Box<dyn TpmData>>,
+        params: Vec<Box<dyn ToTpm>>,
     ) -> Self {
         Tpm2Command {
             tag,
@@ -42,8 +42,10 @@ impl Tpm2Command {
             params,
         }
     }
+}
 
-    pub fn to_tpm(&self) -> Vec<u8> {
+impl ToTpm for Tpm2Command {
+    fn to_tpm(&self) -> Vec<u8> {
         let tag = self.tag.to_tpm();
         let cc = self.command_code.to_tpm();
         let params: Vec<u8> = self.params.to_tpm();

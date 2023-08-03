@@ -1,5 +1,6 @@
+use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_to_tpm};
 use crate::tpm::structure::{Tpm2BAuth, Tpm2BNonce, TpmAttrSession, TpmHandle};
-use crate::tpm::TpmData;
+use crate::tpm::{FromTpm, ToTpm};
 use crate::TpmResult;
 
 #[derive(Debug, Clone)]
@@ -33,8 +34,8 @@ impl TpmAuthCommand {
     }
 }
 
-impl TpmData for TpmAuthCommand {
-    fn to_tpm(&self) -> Vec<u8> {
+impl_to_tpm! {
+    TpmAuthCommand(self) {
         [
             self.session_handle.to_tpm(),
             self.nonce.to_tpm(),
@@ -45,7 +46,19 @@ impl TpmData for TpmAuthCommand {
         .to_vec()
     }
 
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+    TpmAuthResponse(self) {
+        [
+            self.nonce.to_tpm(),
+            self.session_attributes.to_tpm(),
+            self.hmac.to_tpm(),
+        ]
+        .concat()
+        .to_vec()
+    }
+}
+
+impl_from_tpm! {
+    TpmAuthCommand(v) {
         let (session_handle, v) = TpmHandle::from_tpm(v)?;
         let (nonce, v) = Tpm2BNonce::from_tpm(v)?;
         let (session_attributes, v) = TpmAttrSession::from_tpm(v)?;
@@ -60,20 +73,8 @@ impl TpmData for TpmAuthCommand {
             v,
         ))
     }
-}
 
-impl TpmData for TpmAuthResponse {
-    fn to_tpm(&self) -> Vec<u8> {
-        [
-            self.nonce.to_tpm(),
-            self.session_attributes.to_tpm(),
-            self.hmac.to_tpm(),
-        ]
-        .concat()
-        .to_vec()
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+    TpmAuthResponse(v) {
         let (nonce, v) = Tpm2BNonce::from_tpm(v)?;
         let (session_attributes, v) = TpmAttrSession::from_tpm(v)?;
         let (hmac, v) = Tpm2BAuth::from_tpm(v)?;

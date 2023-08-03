@@ -52,15 +52,17 @@ impl std::convert::From<TpmError> for Error {
     }
 }
 
-pub trait TpmData: std::fmt::Debug {
+pub trait ToTpm: std::fmt::Debug {
     fn to_tpm(&self) -> Vec<u8>;
+}
+
+pub trait FromTpm: std::fmt::Debug {
     fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])>
     where
         Self: Sized;
 }
 
-pub trait TpmDataWithSelector<T>: std::fmt::Debug {
-    fn to_tpm(&self) -> Vec<u8>;
+pub trait FromTpmWithSelector<T>: std::fmt::Debug {
     fn from_tpm<'a>(v: &'a [u8], selector: &T) -> TpmResult<(Self, &'a [u8])>
     where
         Self: Sized;
@@ -151,7 +153,7 @@ pub trait TpmDataVec {
         Self: Sized;
 }
 
-impl<T: TpmData> TpmDataVec for Vec<T> {
+impl<T: ToTpm + FromTpm> TpmDataVec for Vec<T> {
     fn to_tpm(&self) -> Vec<u8> {
         self.iter()
             .map(|x| x.to_tpm())
@@ -172,7 +174,7 @@ impl<T: TpmData> TpmDataVec for Vec<T> {
     }
 }
 
-impl TpmDataVec for Vec<Box<dyn TpmData>> {
+impl TpmDataVec for Vec<Box<dyn ToTpm>> {
     fn to_tpm(&self) -> Vec<u8> {
         self.iter()
             .map(|x| x.to_tpm())

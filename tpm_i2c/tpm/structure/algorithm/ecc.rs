@@ -1,5 +1,6 @@
+use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_to_tpm};
 use crate::tpm::structure::Tpm2BEccParameter;
-use crate::tpm::TpmData;
+use crate::tpm::{FromTpm, ToTpm};
 use crate::TpmResult;
 
 #[derive(Debug)]
@@ -8,12 +9,14 @@ pub struct TpmsEccPoint {
     pub y: Tpm2BEccParameter,
 }
 
-impl TpmData for TpmsEccPoint {
-    fn to_tpm(&self) -> Vec<u8> {
+impl_to_tpm! {
+    TpmsEccPoint(self) {
         [self.x.to_tpm(), self.y.to_tpm()].concat()
     }
+}
 
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+impl_from_tpm! {
+    TpmsEccPoint(v) {
         let (x, v) = Tpm2BEccParameter::from_tpm(v)?;
         let (y, v) = Tpm2BEccParameter::from_tpm(v)?;
         Ok((TpmsEccPoint { x, y }, v))

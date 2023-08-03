@@ -1,4 +1,5 @@
-use crate::tpm::{TpmData, TpmError};
+use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_to_tpm};
+use crate::tpm::{FromTpm, ToTpm, TpmError};
 use crate::util::{p32be, u32be};
 use crate::TpmResult;
 use bitfield_struct::bitfield;
@@ -54,40 +55,38 @@ pub struct TpmAttrObject {
     _reserved_5: u16,
 }
 
-impl TpmData for TpmAttrSession {
-    fn to_tpm(&self) -> Vec<u8> {
+impl_to_tpm! {
+    TpmAttrSession(self) {
         vec![self.0]
     }
 
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+    TpmAttrAlgorithm(self) {
+        p32be(self.0).to_vec()
+    }
+
+    TpmAttrObject(self) {
+        p32be(self.0).to_vec()
+    }
+}
+
+impl_from_tpm! {
+    TpmAttrSession(v) {
         if v.is_empty() {
             Err(TpmError::create_parse_error("length mismatch").into())
         } else {
             Ok((TpmAttrSession::from(v[0]), &v[1..]))
         }
     }
-}
 
-impl TpmData for TpmAttrAlgorithm {
-    fn to_tpm(&self) -> Vec<u8> {
-        p32be(self.0).to_vec()
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+    TpmAttrAlgorithm(v) {
         if v.is_empty() {
             Err(TpmError::create_parse_error("length mismatch").into())
         } else {
             Ok((TpmAttrAlgorithm::from(u32be(&v[0..4])), &v[4..]))
         }
     }
-}
 
-impl TpmData for TpmAttrObject {
-    fn to_tpm(&self) -> Vec<u8> {
-        p32be(self.0).to_vec()
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+    TpmAttrObject(v) {
         if v.is_empty() {
             Err(TpmError::create_parse_error("length mismatch").into())
         } else {

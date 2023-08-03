@@ -1,4 +1,4 @@
-use crate::tpm::{TpmData, TpmError};
+use crate::tpm::{FromTpm, TpmError};
 use crate::TpmResult;
 
 use crate::tpm::structure::{TpmAuthResponse, TpmHandle, TpmStructureTag};
@@ -136,16 +136,12 @@ pub enum TpmResponseCode {
     Format1(TpmResponseCodeFormat1),
     Warning(TpmResponseCodeWarning),
     VendorSpecific(u32),
-    ErrorForParam((u8, TpmResponseCodeFormat0)),
-    ErrorForHandle((u8, TpmResponseCodeFormat0)),
-    ErrorForSession((u8, TpmResponseCodeFormat0)),
+    ErrorForParam((u8, TpmResponseCodeFormat1)),
+    ErrorForHandle((u8, TpmResponseCodeFormat1)),
+    ErrorForSession((u8, TpmResponseCodeFormat1)),
 }
 
-impl TpmData for TpmResponseCode {
-    fn to_tpm(&self) -> Vec<u8> {
-        panic!();
-    }
-
+impl FromTpm for TpmResponseCode {
     fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
         // Reference: TPM 2.0 Specification Part 1: Figure 27
         if v.len() < 4 {

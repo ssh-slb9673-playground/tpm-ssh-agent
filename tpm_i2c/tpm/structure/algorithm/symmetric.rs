@@ -1,25 +1,15 @@
+use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_from_tpm_with_selector, impl_to_tpm};
 use crate::tpm::structure::{
     Tpm2BAuth, Tpm2BSensitiveData, TpmAlgorithm, TpmAlgorithmType, TpmKeyBits, TpmiAlgorithmHash,
     TpmiAlgorithmSymMode, TpmiAlgorithmSymmetric,
 };
 
-use crate::tpm::{TpmData, TpmDataWithSelector, TpmError, TpmResult};
+use crate::tpm::{FromTpm, FromTpmWithSelector, ToTpm, TpmError, TpmResult};
 use std::collections::HashSet;
 
 #[derive(Debug)]
 pub struct TpmsSymcipherParams {
     pub sym: TpmtSymdefObject,
-}
-
-impl TpmData for TpmsSymcipherParams {
-    fn to_tpm(&self) -> Vec<u8> {
-        self.sym.to_tpm()
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
-        let (res, v) = TpmtSymdefObject::from_tpm(v)?;
-        Ok((TpmsSymcipherParams { sym: res }, v))
-    }
 }
 
 #[derive(Debug)]
@@ -30,8 +20,39 @@ pub struct TpmtSymdefObject {
     // details: TpmuSymDetails, <- we must omit this; see [TPM 2.0 Library Part 2, Section 11.1.6] Table 140
 }
 
-impl TpmData for TpmtSymdefObject {
-    fn to_tpm(&self) -> Vec<u8> {
+#[derive(Debug)]
+pub enum TpmuSymKeybits {
+    SymmetricAlgo(TpmiAlgorithmSymmetric, TpmKeyBits),
+    Xor(TpmiAlgorithmHash),
+    Null,
+}
+
+#[derive(Debug)]
+pub enum TpmuSymMode {
+    SymmetricAlgo(TpmiAlgorithmSymmetric, TpmiAlgorithmSymMode),
+    Xor,
+    Null,
+}
+
+#[derive(Debug)]
+pub enum TpmuSymDetails {
+    SymmetricAlgo(TpmiAlgorithmSymmetric),
+    Xor,
+    Null,
+}
+
+#[derive(Debug)]
+pub struct TpmsSensitiveCreate {
+    pub user_auth: Tpm2BAuth,
+    pub data: Tpm2BSensitiveData,
+}
+
+impl_to_tpm! {
+    TpmsSymcipherParams(self) {
+        self.sym.to_tpm()
+    }
+
+    TpmtSymdefObject(self) {
         [
             self.algorithm.to_tpm(),
             self.key_bits.to_tpm(),
@@ -40,7 +61,33 @@ impl TpmData for TpmtSymdefObject {
         .concat()
     }
 
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+    TpmuSymKeybits(self) {
+        match &self {
+            TpmuSymKeybits::SymmetricAlgo(_, bits) => bits.to_tpm(),
+            TpmuSymKeybits::Xor(hash) => hash.to_tpm(),
+            _ => vec![],
+        }
+    }
+
+    TpmuSymMode(self) {
+        match &self {
+            TpmuSymMode::SymmetricAlgo(_, mode) => mode.to_tpm(),
+            _ => vec![],
+        }
+    }
+
+    TpmsSensitiveCreate(self) {
+        [self.user_auth.to_tpm(), self.data.to_tpm()].concat()
+    }
+}
+
+impl_from_tpm! {
+    TpmsSymcipherParams(v) {
+        let (res, v) = TpmtSymdefObject::from_tpm(v)?;
+        Ok((TpmsSymcipherParams { sym: res }, v))
+    }
+
+    TpmtSymdefObject(v) {
         let (algorithm, v) = TpmiAlgorithmSymmetric::from_tpm(v)?;
         let (key_bits, v) = TpmuSymKeybits::from_tpm(v, &algorithm)?;
         let (mode, v) = TpmuSymMode::from_tpm(v, &algorithm)?;
@@ -53,25 +100,16 @@ impl TpmData for TpmtSymdefObject {
             v,
         ))
     }
-}
 
-#[derive(Debug)]
-pub enum TpmuSymKeybits {
-    SymmetricAlgo(TpmiAlgorithmSymmetric, TpmKeyBits),
-    Xor(TpmiAlgorithmHash),
-    Null,
-}
-
-impl TpmDataWithSelector<TpmiAlgorithmSymmetric> for TpmuSymKeybits {
-    fn to_tpm(&self) -> Vec<u8> {
-        match &self {
-            TpmuSymKeybits::SymmetricAlgo(_, bits) => bits.to_tpm(),
-            TpmuSymKeybits::Xor(hash) => hash.to_tpm(),
-            _ => vec![],
-        }
+    TpmsSensitiveCreate(v) {
+        let (user_auth, v) = Tpm2BAuth::from_tpm(v)?;
+        let (data, v) = Tpm2BSensitiveData::from_tpm(v)?;
+        Ok((TpmsSensitiveCreate { user_auth, data }, v))
     }
+}
 
-    fn from_tpm<'a>(v: &'a [u8], selector: &TpmiAlgorithmSymmetric) -> TpmResult<(Self, &'a [u8])> {
+impl_from_tpm_with_selector! {
+    TpmuSymKeybits<TpmiAlgorithmSymmetric>(v, selector) {
         Ok(if selector == &TpmiAlgorithmSymmetric::Null {
             return Err(TpmError::create_parse_error(&format!(
                 "Invalid selector specified: {:?}",
@@ -88,24 +126,8 @@ impl TpmDataWithSelector<TpmiAlgorithmSymmetric> for TpmuSymKeybits {
             unreachable!();
         })
     }
-}
 
-#[derive(Debug)]
-pub enum TpmuSymMode {
-    SymmetricAlgo(TpmiAlgorithmSymmetric, TpmiAlgorithmSymMode),
-    Xor,
-    Null,
-}
-
-impl TpmDataWithSelector<TpmiAlgorithmSymmetric> for TpmuSymMode {
-    fn to_tpm(&self) -> Vec<u8> {
-        match &self {
-            TpmuSymMode::SymmetricAlgo(_, mode) => mode.to_tpm(),
-            _ => vec![],
-        }
-    }
-
-    fn from_tpm<'a>(v: &'a [u8], selector: &TpmiAlgorithmSymmetric) -> TpmResult<(Self, &'a [u8])> {
+    TpmuSymMode<TpmiAlgorithmSymmetric>(v, selector) {
         Ok(if selector == &TpmiAlgorithmSymmetric::Null {
             (TpmuSymMode::Null, v)
         } else if selector == &TpmiAlgorithmSymmetric::Xor {
@@ -116,30 +138,5 @@ impl TpmDataWithSelector<TpmiAlgorithmSymmetric> for TpmuSymMode {
         } else {
             unreachable!();
         })
-    }
-}
-
-#[derive(Debug)]
-pub enum TpmuSymDetails {
-    SymmetricAlgo(TpmiAlgorithmSymmetric),
-    Xor,
-    Null,
-}
-
-#[derive(Debug)]
-pub struct TpmsSensitiveCreate {
-    pub user_auth: Tpm2BAuth,
-    pub data: Tpm2BSensitiveData,
-}
-
-impl TpmData for TpmsSensitiveCreate {
-    fn to_tpm(&self) -> Vec<u8> {
-        [self.user_auth.to_tpm(), self.data.to_tpm()].concat()
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
-        let (user_auth, v) = Tpm2BAuth::from_tpm(v)?;
-        let (data, v) = Tpm2BSensitiveData::from_tpm(v)?;
-        Ok((TpmsSensitiveCreate { user_auth, data }, v))
     }
 }

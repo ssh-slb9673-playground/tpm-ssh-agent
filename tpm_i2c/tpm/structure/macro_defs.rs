@@ -1,11 +1,13 @@
 #[macro_export]
 macro_rules! set_tpm_data_codec {
     ($type:ty, $enc:ident, $dec:ident) => {
-        impl TpmData for $type {
+        impl ToTpm for $type {
             fn to_tpm(&self) -> Vec<u8> {
                 $enc(self)
             }
+        }
 
+        impl FromTpm for $type {
             fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
                 $dec(v)
             }
@@ -69,6 +71,39 @@ macro_rules! def_decoder {
     };
 }
 
+#[macro_export]
+macro_rules! impl_to_tpm {
+    ($($name:ident ($sel: ident) $bl:block)*) => {
+        $(impl ToTpm for $name {
+            fn to_tpm(&$sel) -> Vec<u8>
+                $bl
+        })*
+    }
+}
+
+#[macro_export]
+macro_rules! impl_from_tpm {
+    ($($name:ident ($var: ident) $bl:block)*) => {
+        $(impl FromTpm for $name {
+            fn from_tpm($var: &[u8]) -> TpmResult<($name, &[u8])>
+                $bl
+        })*
+    }
+}
+
+#[macro_export]
+macro_rules! impl_from_tpm_with_selector {
+    ($($name:ident <$type:ty>($var: ident, $selector: ident) $bl:block)*) => {
+        $(impl FromTpmWithSelector<$type> for $name {
+            fn from_tpm<'a>($var: &'a [u8], $selector: &$type) -> TpmResult<($name, &'a [u8])>
+                $bl
+        })*
+    }
+}
+
 pub(crate) use def_decoder;
 pub(crate) use def_encoder;
+pub(crate) use impl_from_tpm;
+pub(crate) use impl_from_tpm_with_selector;
+pub(crate) use impl_to_tpm;
 pub(crate) use set_tpm_data_codec;

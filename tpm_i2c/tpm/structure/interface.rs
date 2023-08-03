@@ -1,8 +1,8 @@
-use crate::tpm::structure::macro_defs::set_tpm_data_codec;
+use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_to_tpm, set_tpm_data_codec};
 use crate::tpm::structure::{
     pack_enum_to_u8, unpack_u8_to_enum, TpmHandle, TpmHandleConstants, TpmPermanentHandle,
 };
-use crate::tpm::{TpmData, TpmError};
+use crate::tpm::{FromTpm, ToTpm, TpmError};
 use crate::TpmResult;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::cast::FromPrimitive;
@@ -67,13 +67,20 @@ impl From<&TpmiHandleHierarchy> for TpmHandle {
     }
 }
 
-impl TpmData for TpmiHandleHierarchy {
-    fn to_tpm(&self) -> Vec<u8> {
+impl_to_tpm! {
+    TpmiHandleHierarchy(self) {
         let handle: TpmHandle = self.into();
         handle.to_tpm()
     }
 
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+    TpmiDhObject(self) {
+        let handle: TpmHandle = self.into();
+        handle.to_tpm()
+    }
+}
+
+impl_from_tpm! {
+    TpmiHandleHierarchy(v) {
         let (handle, v) = TpmHandle::from_tpm(v)?;
         Ok((
             if let Some(t) = TpmPermanentHandle::from_u32(handle) {
@@ -100,15 +107,8 @@ impl TpmData for TpmiHandleHierarchy {
             v,
         ))
     }
-}
 
-impl TpmData for TpmiDhObject {
-    fn to_tpm(&self) -> Vec<u8> {
-        let handle: TpmHandle = self.into();
-        handle.to_tpm()
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+    TpmiDhObject(v) {
         let (handle, v) = TpmHandle::from_tpm(v)?;
         Ok((
             if let Some(t) = TpmPermanentHandle::from_u32(handle) {

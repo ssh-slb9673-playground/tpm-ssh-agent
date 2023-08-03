@@ -1,5 +1,6 @@
-use crate::tpm::TpmData;
+use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_to_tpm};
 use crate::tpm::TpmError;
+use crate::tpm::{FromTpm, ToTpm};
 use crate::util::{p16be, u16be};
 use crate::TpmResult;
 
@@ -8,12 +9,14 @@ pub struct Tpm2BDigest {
     pub buffer: Vec<u8>,
 }
 
-impl TpmData for Tpm2BDigest {
-    fn to_tpm(&self) -> Vec<u8> {
+impl_to_tpm! {
+    Tpm2BDigest(self) {
         [&p16be(self.buffer.len() as u16), self.buffer.as_slice()].concat()
     }
+}
 
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+impl_from_tpm! {
+    Tpm2BDigest(v) {
         if v.len() < 2 {
             return Err(TpmError::create_parse_error("Length mismatch").into());
         }

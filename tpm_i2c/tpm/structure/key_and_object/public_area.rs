@@ -1,9 +1,10 @@
+use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_from_tpm_with_selector, impl_to_tpm};
 use crate::tpm::structure::{
     Tpm2BDigest, Tpm2BPublicKeyRsa, TpmAlgorithm, TpmAlgorithmType, TpmAttrObject, TpmKeyBits,
     TpmiAlgorithmAsymmetricScheme, TpmiAlgorithmHash, TpmiAlgorithmPublic, TpmiAlgorithmRsaScheme,
     TpmsEccPoint, TpmsEmpty, TpmsSymcipherParams, TpmtSymdefObject,
 };
-use crate::tpm::{TpmData, TpmDataWithSelector, TpmError};
+use crate::tpm::{FromTpm, FromTpmWithSelector, ToTpm, TpmError};
 use crate::TpmResult;
 use std::collections::HashSet;
 
@@ -17,8 +18,74 @@ pub struct TpmtPublic {
     pub unique: TpmuPublicIdentifier,
 }
 
-impl TpmData for TpmtPublic {
-    fn to_tpm(&self) -> Vec<u8> {
+#[derive(Debug)]
+pub enum TpmuPublicParams {
+    // keydeHashDetail
+    SymDetail(TpmsSymcipherParams),
+    // RsaDetail(TpmsRsaParams, TpmsAsymParams),
+    // EccDetail(TpmsEccParams, TpmsAsymParams),
+}
+
+#[derive(Debug)]
+pub struct TpmtPublicParams {
+    pub algorithm_type: TpmiAlgorithmPublic,
+    pub parameters: TpmuPublicParams,
+}
+
+#[derive(Debug)]
+pub enum TpmuPublicIdentifier {
+    Sym(Tpm2BDigest),
+    Rsa(Tpm2BPublicKeyRsa),
+    Ecc(TpmsEccPoint),
+    // TODO: to be implement
+    // KeyedHash(Tpm2BDigest),
+    // Derive(TpmsDerive),
+}
+
+#[derive(Debug)]
+pub struct TpmsRsaParams {
+    pub symmetric: TpmtSymdefObject,
+    pub scheme: TpmtRsaScheme,
+    pub key_bits: TpmKeyBits,
+    pub exponent: u32,
+}
+
+#[derive(Debug)]
+pub struct TpmtRsaScheme {
+    pub scheme: TpmiAlgorithmRsaScheme,
+    pub details: TpmuAsymmetricScheme,
+}
+
+#[derive(Debug)]
+pub struct TpmsSchemeHash {
+    hash_algorithm: TpmiAlgorithmHash,
+}
+
+pub type TpmsKeyScheme = TpmsSchemeHash;
+
+#[derive(Debug)]
+pub enum TpmuAsymmetricScheme {
+    Kdf(TpmsKeyScheme),
+    Signature(TpmsSignatureScheme),
+    Encryption(TpmsEncryptionScheme),
+    AnySig(TpmsSchemeHash),
+    Null,
+}
+
+#[derive(Debug)]
+pub enum TpmsEncryptionScheme {
+    AEH(TpmsSchemeHash),
+    AE(TpmsEmpty),
+}
+
+#[derive(Debug)]
+pub enum TpmsSignatureScheme {
+    AX(TpmsSchemeHash),
+    // AXN(TpmsSchemeEcdaa),
+}
+
+impl_to_tpm! {
+    TpmtPublic(self) {
         [
             self.algorithm_type.to_tpm(),
             self.algorithm_name.to_tpm(),
@@ -30,7 +97,55 @@ impl TpmData for TpmtPublic {
         .concat()
     }
 
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
+    TpmuPublicParams(self) {
+        match &self {
+            TpmuPublicParams::SymDetail(params) => params.to_tpm(),
+        }
+    }
+
+    TpmtPublicParams(self) {
+        [self.algorithm_type.to_tpm(), self.parameters.to_tpm()].concat()
+    }
+
+    TpmuPublicIdentifier(self) {
+        match &self {
+            TpmuPublicIdentifier::Sym(x) => x.to_tpm(),
+            TpmuPublicIdentifier::Rsa(x) => x.to_tpm(),
+            TpmuPublicIdentifier::Ecc(x) => x.to_tpm(),
+        }
+    }
+
+    TpmsSchemeHash(self) {
+        self.hash_algorithm.to_tpm()
+    }
+
+    TpmsEncryptionScheme(self) {
+        match self {
+            Self::AEH(sch) => sch.to_tpm(),
+            Self::AE(sch) => sch.to_tpm(),
+        }
+    }
+
+    TpmsSignatureScheme(self) {
+        match self {
+            Self::AX(sch) => sch.to_tpm(),
+            // Self::AXN(sch) => sch.to_tpm(),
+        }
+    }
+
+    TpmuAsymmetricScheme(self) {
+        match self {
+            Self::Kdf(sch) => sch.to_tpm(),
+            Self::Signature(sch) => sch.to_tpm(),
+            Self::Encryption(sch) => sch.to_tpm(),
+            Self::AnySig(sch) => sch.to_tpm(),
+            Self::Null => vec![],
+        }
+    }
+}
+
+impl_from_tpm! {
+    TpmtPublic(v) {
         let (algorithm_type, v) = TpmiAlgorithmPublic::from_tpm(v)?;
         let (algorithm_name, v) = TpmiAlgorithmHash::from_tpm(v)?;
         let (object_attributes, v) = TpmAttrObject::from_tpm(v)?;
@@ -49,24 +164,27 @@ impl TpmData for TpmtPublic {
             v,
         ))
     }
-}
 
-#[derive(Debug)]
-pub enum TpmuPublicParams {
-    // keydeHashDetail
-    SymDetail(TpmsSymcipherParams),
-    // RsaDetail(TpmsRsaParams, TpmsAsymParams),
-    // EccDetail(TpmsEccParams, TpmsAsymParams),
-}
-
-impl TpmDataWithSelector<TpmiAlgorithmPublic> for TpmuPublicParams {
-    fn to_tpm(&self) -> Vec<u8> {
-        match &self {
-            TpmuPublicParams::SymDetail(params) => params.to_tpm(),
-        }
+    TpmtPublicParams(v) {
+        let (algorithm_type, v) = TpmiAlgorithmPublic::from_tpm(v)?;
+        let (parameters, v) = TpmuPublicParams::from_tpm(v, &algorithm_type)?;
+        Ok((
+            TpmtPublicParams {
+                algorithm_type,
+                parameters,
+            },
+            v,
+        ))
     }
 
-    fn from_tpm<'a>(v: &'a [u8], selector: &TpmiAlgorithmPublic) -> TpmResult<(Self, &'a [u8])> {
+    TpmsSchemeHash(v) {
+        let (hash_algorithm, v) = TpmiAlgorithmHash::from_tpm(v)?;
+        Ok((TpmsSchemeHash { hash_algorithm }, v))
+    }
+}
+
+impl_from_tpm_with_selector! {
+    TpmuPublicParams<TpmiAlgorithmPublic>(v, selector) {
         let t = selector.get_type();
         if t == HashSet::from([TpmAlgorithmType::Symmetric]) {
             let (ret, v) = TpmsSymcipherParams::from_tpm(v)?;
@@ -79,28 +197,8 @@ impl TpmDataWithSelector<TpmiAlgorithmPublic> for TpmuPublicParams {
             .into())
         }
     }
-}
 
-#[derive(Debug)]
-pub enum TpmuPublicIdentifier {
-    Sym(Tpm2BDigest),
-    Rsa(Tpm2BPublicKeyRsa),
-    Ecc(TpmsEccPoint),
-    // TODO: to be implement
-    // KeyedHash(Tpm2BDigest),
-    // Derive(TpmsDerive),
-}
-
-impl TpmDataWithSelector<TpmiAlgorithmPublic> for TpmuPublicIdentifier {
-    fn to_tpm(&self) -> Vec<u8> {
-        match &self {
-            TpmuPublicIdentifier::Sym(v) => v.to_tpm(),
-            TpmuPublicIdentifier::Rsa(v) => v.to_tpm(),
-            TpmuPublicIdentifier::Ecc(v) => v.to_tpm(),
-        }
-    }
-
-    fn from_tpm<'a>(v: &'a [u8], selector: &TpmiAlgorithmPublic) -> TpmResult<(Self, &'a [u8])> {
+    TpmuPublicIdentifier<TpmiAlgorithmPublic>(v, selector) {
         Ok(match selector {
             TpmiAlgorithmPublic::Rsa => {
                 let (res, v) = Tpm2BPublicKeyRsa::from_tpm(v)?;
@@ -126,67 +224,8 @@ impl TpmDataWithSelector<TpmiAlgorithmPublic> for TpmuPublicIdentifier {
             }
         })
     }
-}
 
-#[derive(Debug)]
-pub struct TpmsRsaParams {
-    pub symmetric: TpmtSymdefObject,
-    pub scheme: TpmtRsaScheme,
-    pub key_bits: TpmKeyBits,
-    pub exponent: u32,
-}
-
-#[derive(Debug)]
-pub struct TpmtRsaScheme {
-    pub scheme: TpmiAlgorithmRsaScheme,
-    pub details: TpmuAsymmetricScheme,
-}
-
-#[derive(Debug)]
-pub struct TpmsSchemeHash {
-    hash_algorithm: TpmiAlgorithmHash,
-}
-
-impl TpmData for TpmsSchemeHash {
-    fn to_tpm(&self) -> Vec<u8> {
-        self.hash_algorithm.to_tpm()
-    }
-
-    fn from_tpm(v: &[u8]) -> TpmResult<(Self, &[u8])> {
-        let (hash_algorithm, v) = TpmiAlgorithmHash::from_tpm(v)?;
-        Ok((TpmsSchemeHash { hash_algorithm }, v))
-    }
-}
-
-pub type TpmsKeyScheme = TpmsSchemeHash;
-
-#[derive(Debug)]
-pub enum TpmuAsymmetricScheme {
-    Kdf(TpmsKeyScheme),
-    Signature(TpmsSignatureScheme),
-    Encryption(TpmsEncryptionScheme),
-    AnySig(TpmsSchemeHash),
-    Null,
-}
-
-#[derive(Debug)]
-pub enum TpmsEncryptionScheme {
-    AEH(TpmsSchemeHash),
-    AE(TpmsEmpty),
-}
-
-impl TpmDataWithSelector<TpmiAlgorithmAsymmetricScheme> for TpmsEncryptionScheme {
-    fn to_tpm(&self) -> Vec<u8> {
-        match self {
-            Self::AEH(sch) => sch.to_tpm(),
-            Self::AE(sch) => sch.to_tpm(),
-        }
-    }
-
-    fn from_tpm<'a>(
-        v: &'a [u8],
-        selector: &TpmiAlgorithmAsymmetricScheme,
-    ) -> TpmResult<(Self, &'a [u8])> {
+    TpmsEncryptionScheme<TpmiAlgorithmAsymmetricScheme>(v, selector) {
         let types = selector.get_type();
         Ok(if selector == &TpmiAlgorithmAsymmetricScheme::Null {
             (TpmsEncryptionScheme::AE(TpmsEmpty::new()), v)
@@ -203,26 +242,8 @@ impl TpmDataWithSelector<TpmiAlgorithmAsymmetricScheme> for TpmsEncryptionScheme
             (TpmsEncryptionScheme::AE(TpmsEmpty::new()), v)
         })
     }
-}
 
-#[derive(Debug)]
-pub enum TpmsSignatureScheme {
-    AX(TpmsSchemeHash),
-    // AXN(TpmsSchemeEcdaa),
-}
-
-impl TpmDataWithSelector<TpmiAlgorithmAsymmetricScheme> for TpmsSignatureScheme {
-    fn to_tpm(&self) -> Vec<u8> {
-        match self {
-            Self::AX(sch) => sch.to_tpm(),
-            // Self::AXN(sch) => sch.to_tpm(),
-        }
-    }
-
-    fn from_tpm<'a>(
-        v: &'a [u8],
-        selector: &TpmiAlgorithmAsymmetricScheme,
-    ) -> TpmResult<(Self, &'a [u8])> {
+    TpmsSignatureScheme<TpmiAlgorithmAsymmetricScheme>(v, selector) {
         let types = selector.get_type();
         Ok(if selector == &TpmiAlgorithmAsymmetricScheme::Null {
             return Err(TpmError::create_parse_error(&format!(
@@ -243,23 +264,8 @@ impl TpmDataWithSelector<TpmiAlgorithmAsymmetricScheme> for TpmsSignatureScheme 
             todo!();
         })
     }
-}
 
-impl TpmDataWithSelector<TpmiAlgorithmAsymmetricScheme> for TpmuAsymmetricScheme {
-    fn to_tpm(&self) -> Vec<u8> {
-        match self {
-            Self::Kdf(sch) => sch.to_tpm(),
-            Self::Signature(sch) => sch.to_tpm(),
-            Self::Encryption(sch) => sch.to_tpm(),
-            Self::AnySig(sch) => sch.to_tpm(),
-            Self::Null => vec![],
-        }
-    }
-
-    fn from_tpm<'a>(
-        v: &'a [u8],
-        selector: &TpmiAlgorithmAsymmetricScheme,
-    ) -> TpmResult<(Self, &'a [u8])> {
+    TpmuAsymmetricScheme<TpmiAlgorithmAsymmetricScheme>(v, selector) {
         let types = selector.get_type();
         Ok(if selector == &TpmiAlgorithmAsymmetricScheme::Null {
             (TpmuAsymmetricScheme::Null, v)

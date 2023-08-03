@@ -5,7 +5,7 @@ use crate::tpm::structure::{
     Tpm2BDigest, Tpm2Command, Tpm2CommandCode, TpmAuthCommand, TpmAuthResponse, TpmResponseCode,
     TpmStructureTag,
 };
-use crate::tpm::{I2CTpmAccessor, Tpm, TpmData, TpmError};
+use crate::tpm::{FromTpm, I2CTpmAccessor, Tpm, TpmError};
 use crate::TpmResult;
 
 impl<T: I2CTpmAccessor> Tpm<'_, T> {

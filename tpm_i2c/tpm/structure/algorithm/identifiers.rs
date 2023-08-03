@@ -1,6 +1,6 @@
 use crate::tpm::structure::macro_defs::set_tpm_data_codec;
 use crate::tpm::structure::{pack_enum_to_u32, unpack_u32_to_enum};
-use crate::tpm::TpmData;
+use crate::tpm::{FromTpm, ToTpm};
 use crate::TpmResult;
 use enum_iterator::Sequence;
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -256,7 +256,6 @@ impl_subenums!(TpmiAlgorithmRsaScheme);
 #[cfg(test)]
 mod test {
     use crate::tpm::structure::{TpmAlgorithm, TpmAlgorithmIdentifier, TpmAlgorithmType};
-    use crate::tpm::TpmData;
     use enum_iterator::all;
     use num_traits::ToPrimitive;
     use std::collections::HashSet;
@@ -264,7 +263,6 @@ mod test {
     fn to_set<T>() -> HashSet<TpmAlgorithmIdentifier>
     where
         T: enum_iterator::Sequence
-            + TpmData
             + TpmAlgorithm
             + ToPrimitive
             + std::hash::Hash
@@ -280,7 +278,6 @@ mod test {
     fn extract_equal<T>(target: &HashSet<TpmAlgorithmType>) -> HashSet<TpmAlgorithmIdentifier>
     where
         T: enum_iterator::Sequence
-            + TpmData
             + TpmAlgorithm
             + ToPrimitive
             + std::hash::Hash
@@ -297,7 +294,6 @@ mod test {
     fn extract_least<T>(target: &HashSet<TpmAlgorithmType>) -> HashSet<TpmAlgorithmIdentifier>
     where
         T: enum_iterator::Sequence
-            + TpmData
             + TpmAlgorithm
             + ToPrimitive
             + std::hash::Hash
@@ -316,7 +312,6 @@ mod test {
         except: &HashSet<TpmAlgorithmIdentifier>,
     ) where
         T: enum_iterator::Sequence
-            + TpmData
             + TpmAlgorithm
             + ToPrimitive
             + std::hash::Hash
@@ -335,7 +330,6 @@ mod test {
     fn test_algo<T>(target: &HashSet<TpmAlgorithmType>)
     where
         T: enum_iterator::Sequence
-            + TpmData
             + TpmAlgorithm
             + ToPrimitive
             + std::hash::Hash
@@ -351,7 +345,6 @@ mod test {
     fn test_algo_least<T>(target: &HashSet<TpmAlgorithmType>)
     where
         T: enum_iterator::Sequence
-            + TpmData
             + TpmAlgorithm
             + ToPrimitive
             + std::hash::Hash

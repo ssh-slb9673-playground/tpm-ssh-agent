@@ -1,6 +1,6 @@
 use crate::tpm::structure::macro_defs::{def_decoder, def_encoder, set_tpm_data_codec};
-use crate::tpm::TpmData;
 use crate::tpm::TpmError;
+use crate::tpm::{FromTpm, ToTpm};
 use crate::util::{p16be, p32be, u16be, u32be};
 use crate::TpmResult;
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -42,6 +42,7 @@ pub enum Tpm2CommandCode {
     Shutdown = 0x145,
     GetRandom = 0x017B,
     CreatePrimary = 0x00000131,
+    TestParms = 0x0000018a,
 }
 
 // TPM_SU
