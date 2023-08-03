@@ -20,6 +20,7 @@ use subenum::subenum;
     TpmiAlgorithmMacScheme, // !ALG.SX + !ALG.H
     TpmiAlgorithmCipherMode, // !ALG.SE
     TpmiAlgorithmPublic, // !ALG.o
+    TpmiAlgorithmAsymmetricScheme, // !ALG.am + !ALG.ax + !ALG.ae
 )]
 #[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq, Hash, Clone, Copy, Sequence)]
 #[repr(u16)]
@@ -63,23 +64,29 @@ pub enum TpmAlgorithmIdentifier {
     Sm3_256 = 0x0012,
     #[subenum(TpmiAlgorithmSymmetric, TpmiAlgorithmSymObject)]
     Sm4 = 0x0013,
-    #[subenum(TpmiAlgorithmSigScheme)]
+    #[subenum(TpmiAlgorithmSigScheme, TpmiAlgorithmAsymmetricScheme)]
     RsaSsa = 0x0014,
+    #[subenum(TpmiAlgorithmAsymmetricScheme)]
     RsaEs = 0x0015,
-    #[subenum(TpmiAlgorithmSigScheme)]
+    #[subenum(TpmiAlgorithmSigScheme, TpmiAlgorithmAsymmetricScheme)]
     RsaPss = 0x0016,
+    #[subenum(TpmiAlgorithmAsymmetricScheme)]
     Oaep = 0x0017,
-    #[subenum(TpmiAlgorithmSigScheme)]
+    #[subenum(TpmiAlgorithmSigScheme, TpmiAlgorithmAsymmetricScheme)]
     EcDsa = 0x0018,
-    #[subenum(TpmiAlgorithmEccKeyXchg)]
+    #[subenum(TpmiAlgorithmEccKeyXchg, TpmiAlgorithmAsymmetricScheme)]
     EcDh = 0x0019,
-    #[subenum(TpmiAlgorithmSigScheme)]
+    #[subenum(TpmiAlgorithmSigScheme, TpmiAlgorithmAsymmetricScheme)]
     EcDaa = 0x001a,
-    #[subenum(TpmiAlgorithmSigScheme, TpmiAlgorithmEccKeyXchg)]
+    #[subenum(
+        TpmiAlgorithmSigScheme,
+        TpmiAlgorithmEccKeyXchg,
+        TpmiAlgorithmAsymmetricScheme
+    )]
     Sm2 = 0x001b,
-    #[subenum(TpmiAlgorithmSigScheme)]
+    #[subenum(TpmiAlgorithmSigScheme, TpmiAlgorithmAsymmetricScheme)]
     EcSchnorr = 0x001c,
-    #[subenum(TpmiAlgorithmEccKeyXchg)]
+    #[subenum(TpmiAlgorithmEccKeyXchg, TpmiAlgorithmAsymmetricScheme)]
     EcMqv = 0x001d,
     #[subenum(TpmiAlgorithmKdf)]
     Kdf1Sp800_56a = 0x0020,
@@ -135,6 +142,11 @@ set_tpm_data_codec!(
     unpack_u32_to_enum
 );
 set_tpm_data_codec!(TpmiAlgorithmPublic, pack_enum_to_u32, unpack_u32_to_enum);
+set_tpm_data_codec!(
+    TpmiAlgorithmAsymmetricScheme,
+    pack_enum_to_u32,
+    unpack_u32_to_enum
+);
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum TpmAlgorithmType {
@@ -225,117 +237,129 @@ impl_subenums!(TpmiAlgorithmEccKeyXchg);
 impl_subenums!(TpmiAlgorithmMacScheme);
 impl_subenums!(TpmiAlgorithmCipherMode);
 impl_subenums!(TpmiAlgorithmPublic);
+impl_subenums!(TpmiAlgorithmAsymmetricScheme);
 
 #[cfg(test)]
 mod test {
-    use crate::tpm::structure::{
-        TpmAlgorithm, TpmAlgorithmIdentifier, TpmAlgorithmType, TpmiAlgorithmAsymmetric,
-        TpmiAlgorithmCipherMode, TpmiAlgorithmEccKeyXchg, TpmiAlgorithmHash, TpmiAlgorithmKdf,
-        TpmiAlgorithmMacScheme, TpmiAlgorithmPublic, TpmiAlgorithmSigScheme, TpmiAlgorithmSymMode,
-        TpmiAlgorithmSymObject, TpmiAlgorithmSymmetric,
-    };
+    use crate::tpm::structure::{TpmAlgorithm, TpmAlgorithmIdentifier, TpmAlgorithmType};
     use crate::tpm::TpmData;
     use enum_iterator::all;
     use num_traits::ToPrimitive;
     use std::collections::HashSet;
 
+    fn to_set<T>() -> HashSet<TpmAlgorithmIdentifier>
+    where
+        T: enum_iterator::Sequence
+            + TpmData
+            + TpmAlgorithm
+            + ToPrimitive
+            + std::hash::Hash
+            + std::cmp::Eq
+            + Into<TpmAlgorithmIdentifier>,
+    {
+        all::<T>()
+            .map(|x| x.into())
+            .filter(|x| x.to_u32().unwrap() != 0x10)
+            .collect()
+    }
+
+    fn extract_equal<T>(target: &HashSet<TpmAlgorithmType>) -> HashSet<TpmAlgorithmIdentifier>
+    where
+        T: enum_iterator::Sequence
+            + TpmData
+            + TpmAlgorithm
+            + ToPrimitive
+            + std::hash::Hash
+            + std::cmp::Eq
+            + Into<TpmAlgorithmIdentifier>,
+    {
+        all::<T>()
+            .into_iter()
+            .map(|x| x.into())
+            .filter(|x| &x.get_type() == target && x.to_u32().unwrap() != 0x10)
+            .collect::<HashSet<_>>()
+    }
+
+    fn extract_least<T>(target: &HashSet<TpmAlgorithmType>) -> HashSet<TpmAlgorithmIdentifier>
+    where
+        T: enum_iterator::Sequence
+            + TpmData
+            + TpmAlgorithm
+            + ToPrimitive
+            + std::hash::Hash
+            + std::cmp::Eq
+            + Into<TpmAlgorithmIdentifier>,
+    {
+        all::<T>()
+            .into_iter()
+            .map(|x| x.into())
+            .filter(|x| target.is_subset(&x.get_type()) && x.to_u32().unwrap() != 0x10)
+            .collect::<HashSet<_>>()
+    }
+
     fn test_algo_with_except<T>(
         target: &HashSet<TpmAlgorithmType>,
         except: &HashSet<TpmAlgorithmIdentifier>,
     ) where
-        T: enum_iterator::Sequence + TpmData + TpmAlgorithm + ToPrimitive,
+        T: enum_iterator::Sequence
+            + TpmData
+            + TpmAlgorithm
+            + ToPrimitive
+            + std::hash::Hash
+            + std::cmp::Eq
+            + Into<TpmAlgorithmIdentifier>,
     {
-        let algorithms = all::<T>()
-            .into_iter()
-            .map(|x| x.to_tpm())
-            .collect::<Vec<_>>();
-        let except_tpm: HashSet<Vec<u8>> =
-            HashSet::from_iter(except.into_iter().map(|x| x.to_tpm()));
-        for x in all::<TpmAlgorithmIdentifier>() {
-            if x.to_u32().unwrap() == 0x10 {
-                continue;
-            }
-            if &x.get_type() == target {
-                assert!(algorithms.contains(&x.to_tpm()) || except_tpm.contains(&x.to_tpm()));
-            }
-        }
-
-        for x in all::<T>() {
-            if x.to_u32().unwrap() == 0x10 {
-                continue;
-            }
-            assert!(&x.get_type() == target || except_tpm.contains(&x.to_tpm()));
-        }
+        assert_eq!(
+            to_set::<T>(),
+            extract_equal::<TpmAlgorithmIdentifier>(target)
+                .union(&except)
+                .map(|x| *x)
+                .collect::<HashSet<_>>()
+        );
     }
 
     fn test_algo<T>(target: &HashSet<TpmAlgorithmType>)
     where
-        T: enum_iterator::Sequence + TpmData + TpmAlgorithm + ToPrimitive,
+        T: enum_iterator::Sequence
+            + TpmData
+            + TpmAlgorithm
+            + ToPrimitive
+            + std::hash::Hash
+            + std::cmp::Eq
+            + Into<TpmAlgorithmIdentifier>,
     {
-        test_algo_with_except::<T>(target, &HashSet::new())
-    }
-
-    fn test_algo_or<T>(target1: &HashSet<TpmAlgorithmType>, target2: &HashSet<TpmAlgorithmType>)
-    where
-        T: enum_iterator::Sequence + TpmData + TpmAlgorithm + ToPrimitive,
-    {
-        let algorithms = all::<T>()
-            .into_iter()
-            .map(|x| x.to_tpm())
-            .collect::<Vec<_>>();
-
-        for x in all::<TpmAlgorithmIdentifier>() {
-            if x.to_u32().unwrap() == 0x10 {
-                continue;
-            }
-            if &x.get_type() == target1 {
-                assert!(algorithms.contains(&x.to_tpm()));
-            } else if &x.get_type() == target2 {
-                assert!(algorithms.contains(&x.to_tpm()));
-            }
-        }
-
-        for x in all::<T>() {
-            if x.to_u32().unwrap() == 0x10 {
-                continue;
-            }
-            assert!(&x.get_type() == target1 || &x.get_type() == target2);
-        }
+        assert_eq!(
+            to_set::<T>(),
+            extract_equal::<TpmAlgorithmIdentifier>(target)
+        );
     }
 
     fn test_algo_least<T>(target: &HashSet<TpmAlgorithmType>)
     where
-        T: enum_iterator::Sequence + TpmData + TpmAlgorithm + ToPrimitive,
+        T: enum_iterator::Sequence
+            + TpmData
+            + TpmAlgorithm
+            + ToPrimitive
+            + std::hash::Hash
+            + std::cmp::Eq
+            + Into<TpmAlgorithmIdentifier>,
     {
-        let algorithms = all::<T>()
-            .into_iter()
-            .map(|x| x.to_tpm())
-            .collect::<Vec<_>>();
-        for x in all::<TpmAlgorithmIdentifier>() {
-            if x.to_u32().unwrap() == 0x10 {
-                continue;
-            }
-            if target.is_subset(&x.get_type()) {
-                assert!(algorithms.contains(&x.to_tpm()));
-            }
-        }
-
-        for x in all::<T>() {
-            if x.to_u32().unwrap() == 0x10 {
-                continue;
-            }
-            assert!(target.is_subset(&x.get_type()));
-        }
+        assert_eq!(
+            to_set::<T>(),
+            extract_least::<TpmAlgorithmIdentifier>(target)
+        );
     }
 
     #[test]
     fn test_hash() {
-        test_algo::<TpmiAlgorithmHash>(&HashSet::from([TpmAlgorithmType::Hash]));
+        test_algo::<crate::tpm::structure::TpmiAlgorithmHash>(&HashSet::from([
+            TpmAlgorithmType::Hash,
+        ]));
     }
 
     #[test]
     fn test_assym() {
-        test_algo::<TpmiAlgorithmAsymmetric>(&HashSet::from([
+        test_algo::<crate::tpm::structure::TpmiAlgorithmAsymmetric>(&HashSet::from([
             TpmAlgorithmType::Asymmetric,
             TpmAlgorithmType::Object,
         ]));
@@ -343,12 +367,14 @@ mod test {
 
     #[test]
     fn test_symobj() {
-        test_algo::<TpmiAlgorithmSymObject>(&HashSet::from([TpmAlgorithmType::Symmetric]));
+        test_algo::<crate::tpm::structure::TpmiAlgorithmSymObject>(&HashSet::from([
+            TpmAlgorithmType::Symmetric,
+        ]));
     }
 
     #[test]
     fn test_kdf() {
-        test_algo::<TpmiAlgorithmKdf>(&HashSet::from([
+        test_algo::<crate::tpm::structure::TpmiAlgorithmKdf>(&HashSet::from([
             TpmAlgorithmType::Hash,
             TpmAlgorithmType::MaskGeneration,
         ]));
@@ -356,7 +382,7 @@ mod test {
 
     #[test]
     fn test_ciphermode() {
-        test_algo::<TpmiAlgorithmCipherMode>(&HashSet::from([
+        test_algo::<crate::tpm::structure::TpmiAlgorithmCipherMode>(&HashSet::from([
             TpmAlgorithmType::Symmetric,
             TpmAlgorithmType::Encryption,
         ]));
@@ -364,7 +390,7 @@ mod test {
 
     #[test]
     fn test_sym() {
-        test_algo_with_except::<TpmiAlgorithmSymmetric>(
+        test_algo_with_except::<crate::tpm::structure::TpmiAlgorithmSymmetric>(
             &HashSet::from([TpmAlgorithmType::Symmetric]),
             &HashSet::from([TpmAlgorithmIdentifier::Xor]),
         );
@@ -372,7 +398,7 @@ mod test {
 
     #[test]
     fn test_ecckx() {
-        test_algo_with_except::<TpmiAlgorithmEccKeyXchg>(
+        test_algo_with_except::<crate::tpm::structure::TpmiAlgorithmEccKeyXchg>(
             &HashSet::from([
                 TpmAlgorithmType::Asymmetric,
                 TpmAlgorithmType::MaskGeneration,
@@ -383,23 +409,41 @@ mod test {
 
     #[test]
     fn test_symmode() {
-        test_algo_or::<TpmiAlgorithmSymMode>(
-            &HashSet::from([TpmAlgorithmType::Symmetric, TpmAlgorithmType::Encryption]),
-            &HashSet::from([TpmAlgorithmType::Symmetric, TpmAlgorithmType::Signing]),
+        let target1 = HashSet::from([TpmAlgorithmType::Symmetric, TpmAlgorithmType::Encryption]); // !ALG.SE
+        let target2 = HashSet::from([TpmAlgorithmType::Symmetric, TpmAlgorithmType::Signing]); // !ALG.SX
+
+        let extracted: HashSet<TpmAlgorithmIdentifier> =
+            extract_equal::<TpmAlgorithmIdentifier>(&target1)
+                .union(&extract_equal::<TpmAlgorithmIdentifier>(&target2))
+                .map(|x| *x)
+                .collect();
+
+        assert_eq!(
+            to_set::<crate::tpm::structure::TpmiAlgorithmSymMode>(),
+            extracted
         );
     }
 
     #[test]
     fn test_macsch() {
-        test_algo_or::<TpmiAlgorithmMacScheme>(
-            &HashSet::from([TpmAlgorithmType::Hash]),
-            &HashSet::from([TpmAlgorithmType::Symmetric, TpmAlgorithmType::Signing]),
+        let target1 = HashSet::from([TpmAlgorithmType::Hash]); // !ALG.H
+        let target2 = HashSet::from([TpmAlgorithmType::Symmetric, TpmAlgorithmType::Signing]); // !ALG.SX
+
+        let extracted: HashSet<TpmAlgorithmIdentifier> =
+            extract_equal::<TpmAlgorithmIdentifier>(&target1)
+                .union(&extract_equal::<TpmAlgorithmIdentifier>(&target2))
+                .map(|x| *x)
+                .collect();
+
+        assert_eq!(
+            to_set::<crate::tpm::structure::TpmiAlgorithmMacScheme>(),
+            extracted
         );
     }
 
     #[test]
     fn test_sigsch() {
-        test_algo_least::<TpmiAlgorithmSigScheme>(&HashSet::from([
+        test_algo_least::<crate::tpm::structure::TpmiAlgorithmSigScheme>(&HashSet::from([
             TpmAlgorithmType::Asymmetric,
             TpmAlgorithmType::Signing,
         ]));
@@ -407,6 +451,32 @@ mod test {
 
     #[test]
     fn test_public() {
-        test_algo_least::<TpmiAlgorithmPublic>(&HashSet::from([TpmAlgorithmType::Object]));
+        test_algo_least::<crate::tpm::structure::TpmiAlgorithmPublic>(&HashSet::from([
+            TpmAlgorithmType::Object,
+        ]));
+    }
+
+    #[test]
+    fn test_assym_scheme() {
+        let target1 = HashSet::from([
+            TpmAlgorithmType::Asymmetric,
+            TpmAlgorithmType::MaskGeneration,
+        ]); // !ALG.am
+        let target2 = HashSet::from([TpmAlgorithmType::Asymmetric, TpmAlgorithmType::Signing]); // !ALG.ax
+        let target3 = HashSet::from([TpmAlgorithmType::Asymmetric, TpmAlgorithmType::Encryption]); // !ALG.ae
+
+        let extracted: HashSet<TpmAlgorithmIdentifier> =
+            extract_least::<TpmAlgorithmIdentifier>(&target1)
+                .union(&extract_least::<TpmAlgorithmIdentifier>(&target2))
+                .map(|x| *x)
+                .collect::<HashSet<_>>()
+                .union(&extract_least::<TpmAlgorithmIdentifier>(&target3))
+                .map(|x| *x)
+                .collect();
+
+        assert_eq!(
+            to_set::<crate::tpm::structure::TpmiAlgorithmAsymmetricScheme>(),
+            extracted
+        );
     }
 }
