@@ -141,21 +141,20 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
         self.wait_command_ready()?;
         self.write_locality(self.current_locality)?;
         let mut remain = data.clone();
-        const WRITE_PACKET_SIZE_MAX: usize = 59;
         loop {
             let burst_count = self.read_status()?.burst_count() as usize;
             if burst_count >= 0x8000 {
                 continue;
             }
-            let write_len = remain.len().min(burst_count).min(WRITE_PACKET_SIZE_MAX);
+            let write_len = remain.len().min(burst_count);
             self.device
                 .i2c_write(&[[0x24].to_vec(), remain[0..write_len].to_vec()].concat())?;
+            dbg!(self.read_status()?.burst_count());
             if write_len == remain.len() {
                 break;
             }
             remain = &remain[write_len..];
         }
-        dbg!(self.read_status()?);
         loop {
             self.wait_status_valid()?;
             if !self.read_status()?.expect() {

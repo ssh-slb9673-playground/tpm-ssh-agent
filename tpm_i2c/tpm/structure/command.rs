@@ -53,10 +53,10 @@ impl ToTpm for Tpm2Command {
         let handles = self.handles.to_tpm();
         let auth_area = self.auth_area.to_tpm();
         let auth_size = auth_area.len();
-        println!("auth_size = {}", auth_size);
         let size: u32 = (tag.len() + cc.len() + handles.len() + auth_size + params.len()) as u32
             + 4
             + if self.auth_area.is_empty() { 0 } else { 4 };
+        dbg!(size);
         [
             tag,
             p32be(size).to_vec(),

@@ -107,14 +107,16 @@ impl I2CTpmAccessor for MCP2221A {
         let size = write_buf.len();
         let mut offset = 0;
         self.wait_busy()?;
+        let mut retry = 0;
         while offset < size {
             let write_size = (size - offset).min(60);
+            let cmd = 0x90;
             self.device.write(
                 &[
                     &[
-                        0x90u8,
-                        (write_size & 255) as u8,
-                        ((write_size >> 8) & 255) as u8,
+                        cmd,
+                        (size & 255) as u8,
+                        ((size >> 8) & 255) as u8,
                         self.i2c_addr_write,
                     ],
                     &write_buf[offset..(offset + write_size)],
@@ -123,14 +125,18 @@ impl I2CTpmAccessor for MCP2221A {
             )?;
             let mut read_buf = [0u8; 64];
             self.device.read(&mut read_buf)?;
-            assert_eq!(read_buf[0], 0x90u8);
+            assert_eq!(read_buf[0], cmd);
             // From Microchip's datasheet p.39:
             // read_buf[1] == 1 <=> "I2C engine is busy (command not completed)."
             if read_buf[1] == 1 {
-                self.setup_i2c()?;
-                return Err(Error::Hardware);
+                retry += 1;
+                if retry > 5 {
+                    self.setup_i2c()?;
+                    return Err(Error::Hardware);
+                }
+                sleep(Duration::from_millis(1));
+                continue;
             }
-            self.wait_busy()?;
             offset += write_size;
         }
 
