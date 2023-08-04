@@ -149,7 +149,6 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
             let write_len = remain.len().min(burst_count);
             self.device
                 .i2c_write(&[[0x24].to_vec(), remain[0..write_len].to_vec()].concat())?;
-            dbg!(self.read_status()?.burst_count());
             if write_len == remain.len() {
                 break;
             }
