@@ -1,6 +1,8 @@
-use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_from_tpm_with_selector};
-use crate::tpm::structure::{TpmAlgorithmIdentifier, TpmAttrAlgorithm, TpmCapabilities};
-use crate::tpm::{FromTpm, FromTpmWithSelector, TpmError};
+use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_from_tpm_with_selector, impl_to_tpm};
+use crate::tpm::structure::{
+    TpmAlgorithmIdentifier, TpmAttrAlgorithm, TpmCapabilities, TpmiAlgorithmHash,
+};
+use crate::tpm::{FromTpm, FromTpmWithSelector, ToTpm, TpmError};
 use crate::TpmResult;
 
 #[derive(Debug)]
@@ -22,8 +24,23 @@ pub struct TpmsAlgorithmProperty {
 
 #[derive(Debug)]
 pub struct TpmlAlgorithmProperty {
-    pub count: u32,
     pub algorithm_properties: Vec<TpmsAlgorithmProperty>,
+}
+
+#[derive(Debug)]
+pub struct TpmlPcrSelection {
+    pub algorithm_hash: TpmiAlgorithmHash,
+    pub pcr_select: Vec<u8>,
+}
+
+impl_to_tpm! {
+    TpmlPcrSelection(self) {
+        [
+            self.algorithm_hash.to_tpm(),
+            vec![self.pcr_select.len() as u8],
+            self.pcr_select.to_vec()
+        ].concat()
+    }
 }
 
 impl_from_tpm! {
@@ -47,14 +64,28 @@ impl_from_tpm! {
 
     TpmlAlgorithmProperty(_v) {
         let (count, _v) = u32::from_tpm(_v)?;
-        let mut algorithm_properties= vec![];
+        let mut algorithm_properties = vec![];
         for _ in 0..count {
             let (prop, _v) = TpmsAlgorithmProperty::from_tpm(_v)?;
             algorithm_properties.push(prop);
         }
         Ok((TpmlAlgorithmProperty {
-            count,
             algorithm_properties
+        }, _v))
+    }
+
+    TpmlPcrSelection(_v) {
+        let (algorithm_hash, _v) = TpmiAlgorithmHash::from_tpm(_v)?;
+        let (count, _v) = u16::from_tpm(_v)?;
+        let mut pcr_select = vec![];
+        for _ in 0..count {
+            let (pcr, _v) = u8::from_tpm(_v)?;
+            pcr_select.push(pcr);
+        }
+
+        Ok((TpmlPcrSelection {
+            algorithm_hash,
+            pcr_select
         }, _v))
     }
 }

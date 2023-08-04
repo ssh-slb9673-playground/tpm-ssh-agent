@@ -3,9 +3,14 @@ use crate::tpm::structure::{
     Tpm2BAuth, Tpm2BSensitiveData, TpmAlgorithm, TpmAlgorithmType, TpmKeyBits, TpmiAlgorithmHash,
     TpmiAlgorithmSymMode, TpmiAlgorithmSymmetric,
 };
-
 use crate::tpm::{FromTpm, FromTpmWithSelector, ToTpm, TpmError, TpmResult};
+use crate::util::{p16be, u16be};
 use std::collections::HashSet;
+
+#[derive(Debug)]
+pub struct Tpm2BSensitiveCreate {
+    pub sensitive: TpmsSensitiveCreate,
+}
 
 #[derive(Debug)]
 pub struct TpmsSymcipherParams {
@@ -79,6 +84,11 @@ impl_to_tpm! {
     TpmsSensitiveCreate(self) {
         [self.user_auth.to_tpm(), self.data.to_tpm()].concat()
     }
+
+    Tpm2BSensitiveCreate(self) {
+        let v = self.sensitive.to_tpm();
+        [p16be(v.len() as u16).to_vec(), v].concat()
+    }
 }
 
 impl_from_tpm! {
@@ -105,6 +115,15 @@ impl_from_tpm! {
         let (user_auth, v) = Tpm2BAuth::from_tpm(v)?;
         let (data, v) = Tpm2BSensitiveData::from_tpm(v)?;
         Ok((TpmsSensitiveCreate { user_auth, data }, v))
+    }
+
+    Tpm2BSensitiveCreate(v) {
+        if v.len() < 2 {
+            return Err(TpmError::create_parse_error("Length mismatch").into());
+        }
+        let (_len, v) = (u16be(&v[0..2]) as usize, &v[2..]);
+        let (sensitive, v) = TpmsSensitiveCreate::from_tpm(v)?;
+        Ok((Tpm2BSensitiveCreate {sensitive}, v))
     }
 }
 
