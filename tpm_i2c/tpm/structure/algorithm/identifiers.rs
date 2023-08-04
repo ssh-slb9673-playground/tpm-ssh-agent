@@ -1,5 +1,5 @@
 use crate::tpm::structure::macro_defs::set_tpm_data_codec;
-use crate::tpm::structure::{pack_enum_to_u32, unpack_u32_to_enum};
+use crate::tpm::structure::{pack_enum_to_u16, unpack_u16_to_enum};
 use crate::tpm::{FromTpm, ToTpm};
 use crate::TpmResult;
 use enum_iterator::Sequence;
@@ -130,36 +130,36 @@ pub enum TpmAlgorithmIdentifier {
     ECB = 0x0044,
 }
 
-set_tpm_data_codec!(TpmAlgorithmIdentifier, pack_enum_to_u32, unpack_u32_to_enum);
-set_tpm_data_codec!(TpmiAlgorithmHash, pack_enum_to_u32, unpack_u32_to_enum);
+set_tpm_data_codec!(TpmAlgorithmIdentifier, pack_enum_to_u16, unpack_u16_to_enum);
+set_tpm_data_codec!(TpmiAlgorithmHash, pack_enum_to_u16, unpack_u16_to_enum);
 set_tpm_data_codec!(
     TpmiAlgorithmAsymmetric,
-    pack_enum_to_u32,
-    unpack_u32_to_enum
+    pack_enum_to_u16,
+    unpack_u16_to_enum
 );
-set_tpm_data_codec!(TpmiAlgorithmSymmetric, pack_enum_to_u32, unpack_u32_to_enum);
-set_tpm_data_codec!(TpmiAlgorithmSymObject, pack_enum_to_u32, unpack_u32_to_enum);
-set_tpm_data_codec!(TpmiAlgorithmSymMode, pack_enum_to_u32, unpack_u32_to_enum);
-set_tpm_data_codec!(TpmiAlgorithmKdf, pack_enum_to_u32, unpack_u32_to_enum);
-set_tpm_data_codec!(TpmiAlgorithmSigScheme, pack_enum_to_u32, unpack_u32_to_enum);
+set_tpm_data_codec!(TpmiAlgorithmSymmetric, pack_enum_to_u16, unpack_u16_to_enum);
+set_tpm_data_codec!(TpmiAlgorithmSymObject, pack_enum_to_u16, unpack_u16_to_enum);
+set_tpm_data_codec!(TpmiAlgorithmSymMode, pack_enum_to_u16, unpack_u16_to_enum);
+set_tpm_data_codec!(TpmiAlgorithmKdf, pack_enum_to_u16, unpack_u16_to_enum);
+set_tpm_data_codec!(TpmiAlgorithmSigScheme, pack_enum_to_u16, unpack_u16_to_enum);
 set_tpm_data_codec!(
     TpmiAlgorithmEccKeyXchg,
-    pack_enum_to_u32,
-    unpack_u32_to_enum
+    pack_enum_to_u16,
+    unpack_u16_to_enum
 );
-set_tpm_data_codec!(TpmiAlgorithmMacScheme, pack_enum_to_u32, unpack_u32_to_enum);
+set_tpm_data_codec!(TpmiAlgorithmMacScheme, pack_enum_to_u16, unpack_u16_to_enum);
 set_tpm_data_codec!(
     TpmiAlgorithmCipherMode,
-    pack_enum_to_u32,
-    unpack_u32_to_enum
+    pack_enum_to_u16,
+    unpack_u16_to_enum
 );
-set_tpm_data_codec!(TpmiAlgorithmPublic, pack_enum_to_u32, unpack_u32_to_enum);
+set_tpm_data_codec!(TpmiAlgorithmPublic, pack_enum_to_u16, unpack_u16_to_enum);
 set_tpm_data_codec!(
     TpmiAlgorithmAsymmetricScheme,
-    pack_enum_to_u32,
-    unpack_u32_to_enum
+    pack_enum_to_u16,
+    unpack_u16_to_enum
 );
-set_tpm_data_codec!(TpmiAlgorithmRsaScheme, pack_enum_to_u32, unpack_u32_to_enum);
+set_tpm_data_codec!(TpmiAlgorithmRsaScheme, pack_enum_to_u16, unpack_u16_to_enum);
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum TpmAlgorithmType {

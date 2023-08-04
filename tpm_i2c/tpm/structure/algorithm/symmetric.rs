@@ -22,14 +22,14 @@ pub struct TpmtSymdefObject {
 
 #[derive(Debug)]
 pub enum TpmuSymKeybits {
-    SymmetricAlgo(TpmiAlgorithmSymmetric, TpmKeyBits),
+    SymmetricAlgo(TpmKeyBits),
     Xor(TpmiAlgorithmHash),
     Null,
 }
 
 #[derive(Debug)]
 pub enum TpmuSymMode {
-    SymmetricAlgo(TpmiAlgorithmSymmetric, TpmiAlgorithmSymMode),
+    SymmetricAlgo(TpmiAlgorithmSymMode),
     Xor,
     Null,
 }
@@ -63,7 +63,7 @@ impl_to_tpm! {
 
     TpmuSymKeybits(self) {
         match &self {
-            TpmuSymKeybits::SymmetricAlgo(_, bits) => bits.to_tpm(),
+            TpmuSymKeybits::SymmetricAlgo(bits) => bits.to_tpm(),
             TpmuSymKeybits::Xor(hash) => hash.to_tpm(),
             _ => vec![],
         }
@@ -71,7 +71,7 @@ impl_to_tpm! {
 
     TpmuSymMode(self) {
         match &self {
-            TpmuSymMode::SymmetricAlgo(_, mode) => mode.to_tpm(),
+            TpmuSymMode::SymmetricAlgo(mode) => mode.to_tpm(),
             _ => vec![],
         }
     }
@@ -121,7 +121,7 @@ impl_from_tpm_with_selector! {
             (TpmuSymKeybits::Xor(res), v)
         } else if selector.get_type() == HashSet::from([TpmAlgorithmType::Symmetric]) {
             let (res, v) = TpmKeyBits::from_tpm(v)?;
-            (TpmuSymKeybits::SymmetricAlgo(*selector, res), v)
+            (TpmuSymKeybits::SymmetricAlgo(res), v)
         } else {
             unreachable!();
         })
@@ -134,7 +134,7 @@ impl_from_tpm_with_selector! {
             (TpmuSymMode::Xor, v)
         } else if selector.get_type() == HashSet::from([TpmAlgorithmType::Symmetric]) {
             let (res, v) = TpmiAlgorithmSymMode::from_tpm(v)?;
-            (TpmuSymMode::SymmetricAlgo(*selector, res), v)
+            (TpmuSymMode::SymmetricAlgo(res), v)
         } else {
             unreachable!();
         })

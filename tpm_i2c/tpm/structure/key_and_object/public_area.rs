@@ -186,7 +186,7 @@ impl_from_tpm! {
 impl_from_tpm_with_selector! {
     TpmuPublicParams<TpmiAlgorithmPublic>(v, selector) {
         let t = selector.get_type();
-        if t == HashSet::from([TpmAlgorithmType::Symmetric]) {
+        if HashSet::from([TpmAlgorithmType::Symmetric]).is_subset(&t) {
             let (ret, v) = TpmsSymcipherParams::from_tpm(v)?;
             Ok((TpmuPublicParams::SymDetail(ret), v))
         } else {

@@ -7,7 +7,7 @@ use crate::TpmResult;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::cast::FromPrimitive;
 
-#[derive(FromPrimitive, ToPrimitive, Debug)]
+#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum TpmiYesNo {
     No = 0,

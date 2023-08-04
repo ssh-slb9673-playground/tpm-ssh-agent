@@ -43,6 +43,7 @@ pub enum Tpm2CommandCode {
     GetRandom = 0x017B,
     CreatePrimary = 0x00000131,
     TestParms = 0x0000018a,
+    GetCapability = 0x0000017a,
 }
 
 // TPM_SU
@@ -100,6 +101,22 @@ pub const MAX_LOADED_OBJECTS: u32 = 3;
 pub const MAX_ACTIVE_SESSIONS: u32 = 64;
 pub const MAX_SESSION_NUM: u32 = 3;
 
+#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum TpmCapabilities {
+    Algs = 0,
+    Handles = 1,
+    Commands = 2,
+    PpCommands = 3,
+    AuditCommands = 4,
+    Pcrs = 5,
+    TpmProperties = 6,
+    PcrProperties = 7,
+    EccCurves = 8,
+    AuthPolicies = 9,
+    Act = 10,
+}
+
 pub(super) fn pack_enum_to_u8<T>(_self: &T) -> Vec<u8>
 where
     T: num_traits::ToPrimitive,
@@ -130,3 +147,4 @@ set_tpm_data_codec!(TpmPermanentHandle, pack_enum_to_u32, unpack_u32_to_enum);
 set_tpm_data_codec!(TpmHandleType, pack_enum_to_u32, unpack_u32_to_enum);
 set_tpm_data_codec!(TpmHandleConstants, pack_enum_to_u32, unpack_u32_to_enum);
 set_tpm_data_codec!(TpmSessionType, pack_enum_to_u8, unpack_u8_to_enum);
+set_tpm_data_codec!(TpmCapabilities, pack_enum_to_u32, unpack_u32_to_enum);
