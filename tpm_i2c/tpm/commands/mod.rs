@@ -1,4 +1,5 @@
 mod capability;
+mod context;
 mod hierarchy;
 mod random_number_generator;
 mod session;

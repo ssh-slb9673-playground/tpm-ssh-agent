@@ -2,11 +2,10 @@
     Ref. [TCG TPM 2.0 Library Part3] Section 11. "Session Commands"
 */
 use crate::tpm::structure::{
-    Tpm2BEncryptedSecret, Tpm2BNonce, Tpm2Command, Tpm2CommandCode, Tpm2Response, TpmHandle,
-    TpmResponseCode, TpmSessionType, TpmStructureTag, TpmiAlgorithmHash, TpmiDhEntity,
-    TpmiDhObject, TpmtSymdef,
+    Tpm2BEncryptedSecret, Tpm2BNonce, Tpm2Command, Tpm2CommandCode, TpmHandle, TpmResponseCode,
+    TpmSessionType, TpmStructureTag, TpmiAlgorithmHash, TpmiDhEntity, TpmiDhObject, TpmtSymdef,
 };
-use crate::tpm::{I2CTpmAccessor, ToTpm, Tpm, TpmError};
+use crate::tpm::{FromTpm, I2CTpmAccessor, ToTpm, Tpm, TpmError};
 use crate::TpmResult;
 
 impl<T: I2CTpmAccessor> Tpm<'_, T> {
@@ -19,7 +18,7 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
         session_type: TpmSessionType,
         symmetric: TpmtSymdef,
         auth_hash: TpmiAlgorithmHash,
-    ) -> TpmResult<Tpm2Response> {
+    ) -> TpmResult<(TpmResponseCode, TpmHandle, Tpm2BNonce)> {
         let cmd = Tpm2Command::new_with_session(
             TpmStructureTag::NoSessions,
             Tpm2CommandCode::StartAuthSession,
@@ -34,10 +33,17 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
             ],
         );
         let res = self.execute_with_session(&cmd, 1)?;
-        if res.response_code != TpmResponseCode::Success {
-            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
+
+        if res.response_code == TpmResponseCode::Success {
+            let (handle, v) = TpmHandle::from_tpm(&res.params)?;
+            let (nonce, _) = Tpm2BNonce::from_tpm(v)?;
+            Ok((res.response_code, handle, nonce))
+        } else if let TpmResponseCode::Warning(_) = &res.response_code {
+            let (handle, v) = TpmHandle::from_tpm(&res.params)?;
+            let (nonce, _) = Tpm2BNonce::from_tpm(v)?;
+            Ok((res.response_code, handle, nonce))
         } else {
-            Ok(res)
+            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
         }
     }
 }

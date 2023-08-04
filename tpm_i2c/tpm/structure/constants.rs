@@ -45,6 +45,7 @@ pub enum Tpm2CommandCode {
     TestParms = 0x0000018a,
     GetCapability = 0x0000017a,
     StartAuthSession = 0x00000176,
+    FlushContext = 0x00000165,
 }
 
 // TPM_SU

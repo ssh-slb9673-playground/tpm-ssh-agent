@@ -1,7 +1,9 @@
-use crate::tpm::{FromTpm, TpmError};
+use crate::tpm::{FromTpm, ToTpm, TpmError};
 use crate::TpmResult;
 
-use crate::tpm::structure::{TpmAuthResponse, TpmHandle, TpmStructureTag};
+use crate::tpm::structure::{
+    Tpm2CommandCode, TpmAuthResponse, TpmHandle, TpmStructureTag, TpmiAlgorithmHash,
+};
 
 use num_derive::{FromPrimitive, ToPrimitive};
 
@@ -195,18 +197,31 @@ pub struct Tpm2Response {
     pub response_code: TpmResponseCode,
     pub params: Vec<u8>,
     pub auth_area: Vec<TpmAuthResponse>,
+    rphash_raw: Vec<u8>,
 }
 
 impl Tpm2Response {
-    pub fn from_tpm(v: &[u8], handles_count: usize) -> TpmResult<Tpm2Response> {
+    pub fn from_tpm(
+        _v: &[u8],
+        handles_count: usize,
+        command_code: &Tpm2CommandCode,
+    ) -> TpmResult<Tpm2Response> {
+        let mut v = _v.clone();
+        let mut rphash_raw = vec![];
+
         // len(v) must be larger than len(tag + response_size + response_code)
         if v.len() < 10 {
             return Err(TpmError::create_parse_error("length mismatch").into());
         }
         let len = v.len() as u32;
-        let (tag, v) = TpmStructureTag::from_tpm(v)?;
-        let (size, v) = u32::from_tpm(v)?;
-        let (response_code, v) = TpmResponseCode::from_tpm(v)?;
+        let (tag, tmp) = TpmStructureTag::from_tpm(v)?;
+        v = tmp;
+        let (size, tmp) = u32::from_tpm(v)?;
+        v = tmp;
+        rphash_raw.extend_from_slice(&v[0..4]);
+        rphash_raw.extend_from_slice(&command_code.to_tpm());
+        let (response_code, tmp) = TpmResponseCode::from_tpm(v)?;
+        v = tmp;
 
         if len != size {
             return Err(TpmError::create_parse_error("length mismatch").into());
@@ -216,34 +231,47 @@ impl Tpm2Response {
             let mut handles = vec![];
             for _ in 1..handles_count {
                 #[allow(unused)]
-                let (handle, v) = TpmHandle::from_tpm(v)?;
+                let (handle, tmp) = TpmHandle::from_tpm(v)?;
+                v = tmp;
                 handles.push(handle);
             }
-            let (parameter_size, v) = u32::from_tpm(v)?;
-            let (params, v) = (&v[..parameter_size as usize], &v[parameter_size as usize..]);
+            let (parameter_size, tmp) = u32::from_tpm(v)?;
+            v = tmp;
+            let (params, tmp) = (&v[..parameter_size as usize], &v[parameter_size as usize..]);
+            v = tmp;
+
             let mut auth_area = vec![];
             loop {
-                let (auth, v) = TpmAuthResponse::from_tpm(v)?;
+                let (auth, tmp) = TpmAuthResponse::from_tpm(v)?;
+                v = tmp;
                 if v.is_empty() {
                     break;
                 }
                 auth_area.push(auth);
             }
+            rphash_raw.extend_from_slice(params);
             Ok(Tpm2Response {
                 tag,
                 response_code,
                 params: params.to_vec(),
                 auth_area,
+                rphash_raw,
             })
         } else if tag == TpmStructureTag::NoSessions {
+            rphash_raw.extend_from_slice(v);
             Ok(Tpm2Response {
                 tag,
                 response_code,
                 auth_area: vec![],
                 params: v.to_vec(),
+                rphash_raw,
             })
         } else {
             unreachable!();
         }
+    }
+
+    pub fn rphash(&self, algorithm: TpmiAlgorithmHash) -> Vec<u8> {
+        algorithm.digest(&self.rphash_raw)
     }
 }

@@ -253,6 +253,57 @@ impl_subenums!(TpmiAlgorithmPublic);
 impl_subenums!(TpmiAlgorithmAsymmetricScheme);
 impl_subenums!(TpmiAlgorithmRsaScheme);
 
+impl TpmiAlgorithmHash {
+    pub fn digest(&self, message: &[u8]) -> Vec<u8> {
+        use sha1::Digest;
+        match &self {
+            Self::Sha1 => {
+                let mut hasher = sha1::Sha1::new();
+                hasher.update(message);
+                hasher.finalize().to_vec()
+            }
+            Self::Sha256 => {
+                let mut hasher = sha2::Sha256::new();
+                hasher.update(message);
+                hasher.finalize().to_vec()
+            }
+            Self::Sha384 => {
+                let mut hasher = sha2::Sha384::new();
+                hasher.update(message);
+                hasher.finalize().to_vec()
+            }
+            Self::Sha512 => {
+                let mut hasher = sha2::Sha512::new();
+                hasher.update(message);
+                hasher.finalize().to_vec()
+            }
+            Self::Sha3_256 => {
+                let mut hasher = sha3::Sha3_256::new();
+                hasher.update(message);
+                hasher.finalize().to_vec()
+            }
+            Self::Sha3_384 => {
+                let mut hasher = sha3::Sha3_384::new();
+                hasher.update(message);
+                hasher.finalize().to_vec()
+            }
+            Self::Sha3_512 => {
+                let mut hasher = sha3::Sha3_512::new();
+                hasher.update(message);
+                hasher.finalize().to_vec()
+            }
+            Self::Sm3_256 => {
+                let mut hasher = sm3::Sm3::new();
+                hasher.update(message);
+                hasher.finalize().to_vec()
+            }
+            _ => {
+                unreachable!();
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::tpm::structure::{TpmAlgorithm, TpmAlgorithmIdentifier, TpmAlgorithmType};

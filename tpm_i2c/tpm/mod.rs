@@ -98,13 +98,7 @@ impl<'a, T: I2CTpmAccessor> Tpm<'a, T> {
         &mut self,
         cmd: &Tpm2Command,
     ) -> TpmResult<structure::Tpm2Response> {
-        use std::thread::sleep;
-        use std::time::Duration;
-        self.request_locality(0)?;
-        self.write_fifo(cmd.to_tpm().as_slice())?;
-        sleep(Duration::from_millis(5));
-        self.write_status(&i2c::TpmStatus::new().with_tpm_go(true))?;
-        structure::Tpm2Response::from_tpm(self.read_fifo()?.as_slice(), 0)
+        self.execute_with_session(cmd, 0)
     }
 
     pub(in crate::tpm) fn execute_with_session(
@@ -118,7 +112,11 @@ impl<'a, T: I2CTpmAccessor> Tpm<'a, T> {
         self.write_fifo(cmd.to_tpm().as_slice())?;
         sleep(Duration::from_millis(5));
         self.write_status(&i2c::TpmStatus::new().with_tpm_go(true))?;
-        structure::Tpm2Response::from_tpm(self.read_fifo()?.as_slice(), count_handles)
+        structure::Tpm2Response::from_tpm(
+            self.read_fifo()?.as_slice(),
+            count_handles,
+            &cmd.command_code,
+        )
     }
 
     pub fn init(&mut self, clear_state: bool) -> TpmResult<()> {
