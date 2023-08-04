@@ -49,27 +49,32 @@ impl ToTpm for Tpm2Command {
         let tag = self.tag.to_tpm();
         let cc = self.command_code.to_tpm();
         let params: Vec<u8> = self.params.to_tpm();
-        if self.tag == TpmStructureTag::Sessions {
-            let handles = self.handles.to_tpm();
-            let auth_area = self.auth_area.to_tpm();
-            let auth_size = auth_area.len();
-            let size: u32 =
-                (tag.len() + cc.len() + handles.len() + auth_size + params.len()) as u32 + 4 + 4;
-            [
-                tag,
-                p32be(size).to_vec(),
-                cc,
-                handles,
-                p32be(auth_size as u32).to_vec(),
-                auth_area,
-                params,
-            ]
-            .concat()
-        } else if self.tag == TpmStructureTag::NoSessions {
+        // if self.tag == TpmStructureTag::Sessions {
+        let handles = self.handles.to_tpm();
+        let auth_area = self.auth_area.to_tpm();
+        let auth_size = auth_area.len();
+        let size: u32 = (tag.len() + cc.len() + handles.len() + auth_size + params.len()) as u32
+            + 4
+            + if self.auth_area.is_empty() { 0 } else { 4 };
+        [
+            tag,
+            p32be(size).to_vec(),
+            cc,
+            handles,
+            if !self.auth_area.is_empty() {
+                p32be(auth_size as u32).to_vec()
+            } else {
+                vec![]
+            },
+            auth_area,
+            params,
+        ]
+        .concat()
+        /*} else if self.tag == TpmStructureTag::NoSessions {
             let size: u32 = (tag.len() + cc.len() + params.len()) as u32 + 4;
             [tag, p32be(size).to_vec(), cc, params].concat()
         } else {
             unreachable!();
-        }
+        }*/
     }
 }

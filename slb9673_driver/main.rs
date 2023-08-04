@@ -10,18 +10,7 @@ fn main() -> tpm_i2c::TpmResult<()> {
 
     tpm.print_info()?;
 
-    dbg!(tpm.get_capability(TpmCapabilities::Algs, 0, 1)?);
-
-    dbg!(tpm.test_params(TpmtPublicParams {
-        algorithm_type: TpmiAlgorithmPublic::SymCipher,
-        parameters: TpmuPublicParams::SymDetail(TpmsSymcipherParams {
-            sym: TpmtSymdefObject {
-                algorithm: TpmiAlgorithmSymmetric::Aes,
-                key_bits: TpmuSymKeybits::SymmetricAlgo(128),
-                mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
-            },
-        }),
-    })?);
+    // (tpm.get_capability(TpmCapabilities::Algs, 0, 1)?;
 
     let password = "password".as_bytes();
 
@@ -32,13 +21,27 @@ fn main() -> tpm_i2c::TpmResult<()> {
         hmac: Tpm2BAuth::new(password),
     };
 
-    tpm.create_primary(
-        TpmPermanentHandle::Null.into(),
+    dbg!(tpm.start_auth_session(
+        TpmiDhObject::Null,
+        TpmiDhEntity::Null,
+        Tpm2BNonce::new(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+        Tpm2BEncryptedSecret::new(&[]),
+        TpmSessionType::Hmac,
+        TpmtSymdef {
+            algorithm: TpmiAlgorithmSymmetric::Aes,
+            key_bits: TpmuSymKeybits::SymmetricAlgo(128),
+            mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
+        },
+        TpmiAlgorithmHash::Sha256
+    )?);
+
+    /*tpm.create_primary(
+        TpmPermanentHandle::Owner.into(),
         session.clone(),
         Tpm2BSensitiveCreate {
             sensitive: TpmsSensitiveCreate {
                 user_auth: Tpm2BAuth::new(password),
-                data: Tpm2BSensitiveData::new("test".as_bytes()),
+                data: Tpm2BSensitiveData::new(&[]),
             },
         },
         Tpm2BPublic::new(TpmtPublic {
@@ -48,7 +51,7 @@ fn main() -> tpm_i2c::TpmResult<()> {
             auth_policy: Tpm2BDigest::new(&[]),
             parameters: TpmuPublicParams::SymDetail(TpmsSymcipherParams {
                 sym: TpmtSymdefObject {
-                    algorithm: TpmiAlgorithmSymmetric::Aes,
+                    algorithm: TpmiAlgorithmSymObject::Aes,
                     key_bits: TpmuSymKeybits::SymmetricAlgo(128),
                     mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
                 },
@@ -61,10 +64,11 @@ fn main() -> tpm_i2c::TpmResult<()> {
             pcr_select: vec![],
         },
     )?;
+    */
 
     // println!("{:?}", tpm.read_status()?);
 
-    tpm.shutdown(false)?;
+    tpm.shutdown(true)?;
 
     Ok(())
 }

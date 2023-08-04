@@ -33,6 +33,7 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
             ),
             1,
         )?;
+        dbg!(&res);
         if res.response_code != TpmResponseCode::Success {
             Err(TpmError::UnsuccessfulResponse(res.response_code).into())
         } else {

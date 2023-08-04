@@ -1,7 +1,7 @@
 use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_from_tpm_with_selector, impl_to_tpm};
 use crate::tpm::structure::{
     Tpm2BAuth, Tpm2BSensitiveData, TpmAlgorithm, TpmAlgorithmType, TpmKeyBits, TpmiAlgorithmHash,
-    TpmiAlgorithmSymMode, TpmiAlgorithmSymmetric,
+    TpmiAlgorithmSymMode, TpmiAlgorithmSymObject, TpmiAlgorithmSymmetric,
 };
 use crate::tpm::{FromTpm, FromTpmWithSelector, ToTpm, TpmError, TpmResult};
 use crate::util::{p16be, u16be};
@@ -19,6 +19,14 @@ pub struct TpmsSymcipherParams {
 
 #[derive(Debug)]
 pub struct TpmtSymdefObject {
+    pub algorithm: TpmiAlgorithmSymObject,
+    pub key_bits: TpmuSymKeybits,
+    pub mode: TpmuSymMode,
+    // details: TpmuSymDetails, <- we must omit this; see [TPM 2.0 Library Part 2, Section 11.1.6] Table 140
+}
+
+#[derive(Debug)]
+pub struct TpmtSymdef {
     pub algorithm: TpmiAlgorithmSymmetric,
     pub key_bits: TpmuSymKeybits,
     pub mode: TpmuSymMode,
@@ -55,6 +63,15 @@ pub struct TpmsSensitiveCreate {
 impl_to_tpm! {
     TpmsSymcipherParams(self) {
         self.sym.to_tpm()
+    }
+
+    TpmtSymdef(self) {
+        [
+            self.algorithm.to_tpm(),
+            self.key_bits.to_tpm(),
+            self.mode.to_tpm(),
+        ]
+        .concat()
     }
 
     TpmtSymdefObject(self) {
@@ -97,10 +114,26 @@ impl_from_tpm! {
         Ok((TpmsSymcipherParams { sym: res }, v))
     }
 
-    TpmtSymdefObject(v) {
+    TpmtSymdef(v) {
         let (algorithm, v) = TpmiAlgorithmSymmetric::from_tpm(v)?;
         let (key_bits, v) = TpmuSymKeybits::from_tpm(v, &algorithm)?;
         let (mode, v) = TpmuSymMode::from_tpm(v, &algorithm)?;
+        Ok((
+            TpmtSymdef {
+                algorithm,
+                key_bits,
+                mode,
+            },
+            v,
+        ))
+    }
+
+    TpmtSymdefObject(v) {
+        use num_traits::{FromPrimitive, ToPrimitive};
+        let (algorithm, v) = TpmiAlgorithmSymObject::from_tpm(v)?;
+        let algorithm_sym = TpmiAlgorithmSymmetric::from_u32(algorithm.to_u32().unwrap()).unwrap();
+        let (key_bits, v) = TpmuSymKeybits::from_tpm(v, &algorithm_sym)?;
+        let (mode, v) = TpmuSymMode::from_tpm(v, &algorithm_sym)?;
         Ok((
             TpmtSymdefObject {
                 algorithm,

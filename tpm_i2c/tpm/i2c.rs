@@ -137,18 +137,24 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
     }
 
     pub(in crate::tpm) fn write_fifo(&mut self, data: &[u8]) -> TpmResult<()> {
+        self.write_status(&TpmStatus::new().with_command_ready(true))?;
         self.wait_command_ready()?;
         self.write_locality(self.current_locality)?;
-        for x in data {
+        let mut remain = data.clone();
+        loop {
             let burst_count = self.read_status()?.burst_count() as usize;
             if burst_count >= 0x8000 {
                 return Err(TpmError::Busy.into());
             }
-            if burst_count == 0 {
-                return Err(TpmError::Unreadable.into());
+            let write_len = remain.len().min(burst_count);
+            self.device
+                .i2c_write(&[[0x24].to_vec(), remain[0..write_len].to_vec()].concat())?;
+            if write_len == remain.len() {
+                break;
             }
-            self.device.i2c_write(&[0x24, *x])?;
-            sleep(Duration::from_millis(5));
+            remain = &remain[write_len..];
+        }
+        loop {
             self.wait_status_valid()?;
             if !self.read_status()?.expect() {
                 break;
@@ -176,7 +182,6 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
             if status.command_ready() {
                 break;
             }
-            self.write_status(&TpmStatus::new().with_command_ready(true))?;
             sleep(Duration::from_millis(5));
         }
         Ok(())

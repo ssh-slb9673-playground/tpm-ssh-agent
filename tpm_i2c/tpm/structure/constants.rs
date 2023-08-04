@@ -44,6 +44,7 @@ pub enum Tpm2CommandCode {
     CreatePrimary = 0x00000131,
     TestParms = 0x0000018a,
     GetCapability = 0x0000017a,
+    StartAuthSession = 0x00000176,
 }
 
 // TPM_SU
@@ -63,6 +64,7 @@ pub enum TpmPermanentHandle {
     Owner = 0x40000001,
     Endorsement = 0x4000000b,
     Platform = 0x4000000c,
+    Lockout = 0x4000000A,
 }
 
 #[derive(FromPrimitive, ToPrimitive, Debug)]

@@ -45,7 +45,7 @@ impl MCP2221A {
             sleep(Duration::from_millis(250));
         }
         loop {
-            self.device.write(&[0x10u8, 0, 0, 0x20, 22])?; // 500kHz
+            self.device.write(&[0x10u8, 0, 0, 0x20, 30])?;
             let mut buf = [0u8; 65];
             self.device.read(&mut buf)?;
             if buf[3] == 0x20 {

@@ -67,6 +67,29 @@ impl From<&TpmiHandleHierarchy> for TpmHandle {
     }
 }
 
+impl From<&TpmiDhEntity> for TpmHandle {
+    fn from(other: &TpmiDhEntity) -> TpmHandle {
+        match other {
+            TpmiDhEntity::Transient(v) => *v,
+            TpmiDhEntity::Persistent(v) => *v,
+            TpmiDhEntity::NvIndex(v) => *v,
+            TpmiDhEntity::Pcr(v) => *v,
+            TpmiDhEntity::VendorSpecific(v) => *v,
+            TpmiDhEntity::Owner => TpmPermanentHandle::Owner.into(),
+            TpmiDhEntity::Endorsement => TpmPermanentHandle::Endorsement.into(),
+            TpmiDhEntity::Platform => TpmPermanentHandle::Platform.into(),
+            TpmiDhEntity::Lockout => TpmPermanentHandle::Lockout.into(),
+            TpmiDhEntity::Null => TpmPermanentHandle::Null.into(),
+        }
+    }
+}
+
+impl From<TpmPermanentHandle> for TpmHandle {
+    fn from(handle: TpmPermanentHandle) -> TpmHandle {
+        handle as TpmHandle
+    }
+}
+
 impl_to_tpm! {
     TpmiHandleHierarchy(self) {
         let handle: TpmHandle = self.into();
@@ -139,11 +162,5 @@ impl_from_tpm! {
             },
             v,
         ))
-    }
-}
-
-impl From<TpmPermanentHandle> for TpmHandle {
-    fn from(handle: TpmPermanentHandle) -> TpmHandle {
-        handle as TpmHandle
     }
 }
