@@ -70,7 +70,7 @@ impl TpmSession {
             self.attributes.to_tpm(),
         ]
         .concat();
-        let hmac = self.algorithm.hmac(
+        let _hmac = self.algorithm.hmac(
             &self.generate_session_key(vec![], vec![], bits),
             &target_data,
         );

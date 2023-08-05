@@ -5,7 +5,7 @@ use crate::tpm::structure::{
     Tpm2BEncryptedSecret, Tpm2BNonce, Tpm2Command, Tpm2CommandCode, TpmHandle, TpmResponseCode,
     TpmSessionType, TpmStructureTag, TpmiAlgorithmHash, TpmiDhEntity, TpmiDhObject, TpmtSymdef,
 };
-use crate::tpm::{FromTpm, I2CTpmAccessor, ToTpm, Tpm, TpmError};
+use crate::tpm::{FromTpm, I2CTpmAccessor, Tpm, TpmError};
 use crate::TpmResult;
 
 impl<T: I2CTpmAccessor> Tpm<'_, T> {

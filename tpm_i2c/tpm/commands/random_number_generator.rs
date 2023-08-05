@@ -1,9 +1,9 @@
-use crate::tpm::session::TpmSession;
+
 /**
     Ref. [TCG TPM 2.0 Library Part3] Section 16. "Random Number Generator"
 */
 use crate::tpm::structure::{
-    Tpm2BDigest, Tpm2Command, Tpm2CommandCode, TpmAuthResponse, TpmResponseCode, TpmStructureTag,
+    Tpm2BDigest, Tpm2Command, Tpm2CommandCode, TpmResponseCode, TpmStructureTag,
 };
 use crate::tpm::{FromTpm, I2CTpmAccessor, Tpm, TpmError};
 use crate::TpmResult;
