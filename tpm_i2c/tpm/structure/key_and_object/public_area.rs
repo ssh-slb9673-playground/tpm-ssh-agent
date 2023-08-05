@@ -1,8 +1,8 @@
 use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_from_tpm_with_selector, impl_to_tpm};
 use crate::tpm::structure::{
     Tpm2BDigest, Tpm2BPublicKeyRsa, TpmAlgorithm, TpmAlgorithmType, TpmAttrObject, TpmKeyBits,
-    TpmiAlgorithmAsymmetricScheme, TpmiAlgorithmHash, TpmiAlgorithmPublic, TpmiAlgorithmRsaScheme,
-    TpmsEccPoint, TpmsEmpty, TpmsSymcipherParams, TpmtSymdefObject,
+    TpmiAlgorithmAsymmetricScheme, TpmiAlgorithmHash, TpmiAlgorithmPublic, TpmsEccPoint, TpmsEmpty,
+    TpmsSymcipherParams, TpmtRsaScheme, TpmtSymdefObject,
 };
 use crate::tpm::{FromTpm, FromTpmWithSelector, ToTpm, TpmError};
 use crate::util::{p16be, u16be};
@@ -29,7 +29,7 @@ pub enum TpmuPublicParams {
     // keydeHashDetail
     SymDetail(TpmsSymcipherParams),
     RsaDetail(TpmsRsaParams),
-    // EccDetail(TpmsEccParams, TpmsAsymParams),
+    // EccDetail(TpmsEccParams),
 }
 
 #[derive(Debug)]
@@ -65,12 +65,6 @@ pub struct TpmsRsaParams {
 #[derive(Debug)]
 pub struct TpmtAsymmetricScheme {
     pub scheme: TpmiAlgorithmAsymmetricScheme,
-    pub details: TpmuAsymmetricScheme,
-}
-
-#[derive(Debug)]
-pub struct TpmtRsaScheme {
-    pub scheme: TpmiAlgorithmRsaScheme,
     pub details: TpmuAsymmetricScheme,
 }
 
@@ -182,13 +176,6 @@ impl_to_tpm! {
         ].concat()
     }
 
-    TpmtRsaScheme(self) {
-        [
-            self.scheme.to_tpm(),
-            self.details.to_tpm(),
-        ].concat()
-    }
-
     TpmsAsymmetricParams(self) {
         [
             self.symmetric.to_tpm(),
@@ -268,20 +255,6 @@ impl_from_tpm! {
             scheme,
             key_bits,
             exponent,
-        }, v))
-    }
-
-    TpmtRsaScheme(v) {
-        let (scheme, v) = TpmiAlgorithmRsaScheme::from_tpm(v)?;
-        let scheme_asym : TpmiAlgorithmAsymmetricScheme =
-            num_traits::FromPrimitive::from_u32(
-                num_traits::ToPrimitive::to_u32(&scheme).unwrap()
-            ).unwrap();
-        let (details, v) = TpmuAsymmetricScheme::from_tpm(v, &scheme_asym)?;
-
-        Ok((TpmtRsaScheme {
-            scheme,
-            details,
         }, v))
     }
 }
