@@ -36,6 +36,27 @@ fn main() -> tpm_i2c::TpmResult<()> {
 
     let caller_nonce_first = tpm.get_random(16)?;
 
+    tpm.test_params(TpmtPublicParams {
+        algorithm_type: TpmiAlgorithmPublic::Rsa,
+        parameters: TpmuPublicParams::RsaDetail(TpmsRsaParams {
+            symmetric: TpmtSymdefObject {
+                algorithm: TpmiAlgorithmSymObject::Aes,
+                key_bits: TpmuSymKeybits::SymmetricAlgo(128),
+                mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
+            },
+            scheme: TpmtRsaScheme {
+                scheme: TpmiAlgorithmRsaScheme::RsaEs,
+                details: TpmuAsymmetricScheme::Encryption(TpmsEncryptionScheme::AE(
+                    TpmsEmpty::new(),
+                )),
+            },
+            key_bits: 2048,
+            exponent: 65537,
+        }),
+    })?;
+
+    println!("Test OK");
+
     let (_res, handle, tpm_nonce) = tpm.start_auth_session(
         TpmiDhObject::Null,
         TpmiDhEntity::Null,
@@ -58,6 +79,55 @@ fn main() -> tpm_i2c::TpmResult<()> {
         TpmPermanentHandle::Null,
     );
 
+    let _aes_template = Tpm2BPublic::new(TpmtPublic {
+        algorithm_type: TpmiAlgorithmPublic::SymCipher,
+        algorithm_name: TpmiAlgorithmHash::Sha256,
+        object_attributes: TpmAttrObject::new()
+            .with_fixed_tpm(true)
+            .with_fixed_parent(true)
+            .with_sensitive_data_origin(true)
+            .with_no_dictionary_attack(true)
+            .with_decrypt(true),
+        auth_policy: Tpm2BDigest::new(&[]),
+        parameters: TpmuPublicParams::SymDetail(TpmsSymcipherParams {
+            sym: TpmtSymdefObject {
+                algorithm: TpmiAlgorithmSymObject::Aes,
+                key_bits: TpmuSymKeybits::SymmetricAlgo(128),
+                mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
+            },
+        }),
+        unique: TpmuPublicIdentifier::Sym(Tpm2BDigest::new(&[])),
+    });
+
+    let _rsa_template = Tpm2BPublic::new(TpmtPublic {
+        algorithm_type: TpmiAlgorithmPublic::Rsa,
+        algorithm_name: TpmiAlgorithmHash::Sha256,
+        object_attributes: TpmAttrObject::new()
+            .with_fixed_tpm(true)
+            .with_fixed_parent(true)
+            .with_sensitive_data_origin(true)
+            .with_no_dictionary_attack(true)
+            .with_decrypt(true)
+            .with_user_with_auth(true),
+        auth_policy: Tpm2BDigest::new(&[]),
+        parameters: TpmuPublicParams::RsaDetail(TpmsRsaParams {
+            symmetric: TpmtSymdefObject {
+                algorithm: TpmiAlgorithmSymObject::Null,
+                key_bits: TpmuSymKeybits::Null,
+                mode: TpmuSymMode::Null,
+            },
+            scheme: TpmtRsaScheme {
+                scheme: TpmiAlgorithmRsaScheme::RsaEs,
+                details: TpmuAsymmetricScheme::Encryption(TpmsEncryptionScheme::AE(
+                    TpmsEmpty::new(),
+                )),
+            },
+            key_bits: 2048,
+            exponent: 65537,
+        }),
+        unique: TpmuPublicIdentifier::Sym(Tpm2BDigest::new(&[])),
+    });
+
     session.set_caller_nonce(caller_nonce_first);
     session.set_tpm_nonce(tpm_nonce.buffer);
     session.set_caller_nonce([0u8; 16].to_vec());
@@ -73,25 +143,7 @@ fn main() -> tpm_i2c::TpmResult<()> {
                 data: Tpm2BSensitiveData::new(&[]),
             },
         },
-        Tpm2BPublic::new(TpmtPublic {
-            algorithm_type: TpmiAlgorithmPublic::SymCipher,
-            algorithm_name: TpmiAlgorithmHash::Sha256,
-            object_attributes: TpmAttrObject::new()
-                .with_fixed_tpm(true)
-                .with_fixed_parent(true)
-                .with_sensitive_data_origin(true)
-                .with_no_dictionary_attack(true)
-                .with_decrypt(true),
-            auth_policy: Tpm2BDigest::new(&[]),
-            parameters: TpmuPublicParams::SymDetail(TpmsSymcipherParams {
-                sym: TpmtSymdefObject {
-                    algorithm: TpmiAlgorithmSymObject::Aes,
-                    key_bits: TpmuSymKeybits::SymmetricAlgo(128),
-                    mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
-                },
-            }),
-            unique: TpmuPublicIdentifier::Sym(Tpm2BDigest::new(&[])),
-        }),
+        _rsa_template,
         Tpm2BData::new(&[]),
         TpmlPcrSelection {
             pcr_selections: vec![],

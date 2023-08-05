@@ -45,10 +45,10 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
             let (creation_hash, v) = Tpm2BDigest::from_tpm(v)?;
             let (creation_ticket, v) = TpmtTicketCreation::from_tpm(v)?;
             let (name, v) = Tpm2BName::from_tpm(v)?;
-
-            dbg!(v);
+            assert!(v.is_empty());
 
             Ok(Tpm2CreatePrimaryResponse {
+                handle: res.handles[0],
                 out_public,
                 creation_data,
                 creation_hash,
@@ -61,6 +61,7 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
 
 #[derive(Debug)]
 pub struct Tpm2CreatePrimaryResponse {
+    pub handle: TpmHandle,
     pub out_public: Tpm2BPublic,
     pub creation_data: Tpm2BCreationData,
     pub creation_hash: Tpm2BDigest,

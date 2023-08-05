@@ -163,11 +163,7 @@ impl_from_tpm! {
 impl_from_tpm_with_selector! {
     TpmuSymKeybits<TpmiAlgorithmSymmetric>(v, selector) {
         Ok(if selector == &TpmiAlgorithmSymmetric::Null {
-            return Err(TpmError::create_parse_error(&format!(
-                "Invalid selector specified: {:?}",
-                selector
-            ))
-            .into());
+            (TpmuSymKeybits::Null, v)
         } else if selector == &TpmiAlgorithmSymmetric::Xor {
             let (res, v) = TpmiAlgorithmHash::from_tpm(v)?;
             (TpmuSymKeybits::Xor(res), v)

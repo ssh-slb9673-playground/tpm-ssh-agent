@@ -5,8 +5,14 @@ use crate::tpm::structure::{
     TpmsEccPoint, TpmsEmpty, TpmsSymcipherParams, TpmtSymdefObject,
 };
 use crate::tpm::{FromTpm, FromTpmWithSelector, ToTpm, TpmError};
+use crate::util::{p16be, u16be};
 use crate::TpmResult;
 use std::collections::HashSet;
+
+#[derive(Debug)]
+pub struct Tpm2BPublic {
+    pub public_area: Option<TpmtPublic>,
+}
 
 #[derive(Debug)]
 pub struct TpmtPublic {
@@ -22,7 +28,7 @@ pub struct TpmtPublic {
 pub enum TpmuPublicParams {
     // keydeHashDetail
     SymDetail(TpmsSymcipherParams),
-    // RsaDetail(TpmsRsaParams, TpmsAsymParams),
+    RsaDetail(TpmsRsaParams),
     // EccDetail(TpmsEccParams, TpmsAsymParams),
 }
 
@@ -43,11 +49,23 @@ pub enum TpmuPublicIdentifier {
 }
 
 #[derive(Debug)]
+pub struct TpmsAsymmetricParams {
+    pub symmetric: TpmtSymdefObject,
+    pub scheme: TpmtAsymmetricScheme,
+}
+
+#[derive(Debug)]
 pub struct TpmsRsaParams {
     pub symmetric: TpmtSymdefObject,
     pub scheme: TpmtRsaScheme,
     pub key_bits: TpmKeyBits,
     pub exponent: u32,
+}
+
+#[derive(Debug)]
+pub struct TpmtAsymmetricScheme {
+    pub scheme: TpmiAlgorithmAsymmetricScheme,
+    pub details: TpmuAsymmetricScheme,
 }
 
 #[derive(Debug)]
@@ -58,7 +76,7 @@ pub struct TpmtRsaScheme {
 
 #[derive(Debug)]
 pub struct TpmsSchemeHash {
-    hash_algorithm: TpmiAlgorithmHash,
+    pub hash_algorithm: TpmiAlgorithmHash,
 }
 
 pub type TpmsKeyScheme = TpmsSchemeHash;
@@ -85,6 +103,15 @@ pub enum TpmsSignatureScheme {
 }
 
 impl_to_tpm! {
+    Tpm2BPublic(self) {
+        if let Some(public) = &self.public_area {
+            let v = public.to_tpm();
+            [p16be(v.len() as u16).to_vec(), v].concat()
+        } else {
+            vec![]
+        }
+    }
+
     TpmtPublic(self) {
         [
             self.algorithm_type.to_tpm(),
@@ -100,6 +127,9 @@ impl_to_tpm! {
     TpmuPublicParams(self) {
         match &self {
             TpmuPublicParams::SymDetail(params) => params.to_tpm(),
+            TpmuPublicParams::RsaDetail(params) => [
+                params.to_tpm(),
+            ].concat(),
         }
     }
 
@@ -142,9 +172,54 @@ impl_to_tpm! {
             Self::Null => vec![],
         }
     }
+
+    TpmsRsaParams(self) {
+        [
+            self.symmetric.to_tpm(),
+            self.scheme.to_tpm(),
+            self.key_bits.to_tpm(),
+            self.exponent.to_tpm(),
+        ].concat()
+    }
+
+    TpmtRsaScheme(self) {
+        [
+            self.scheme.to_tpm(),
+            self.details.to_tpm(),
+        ].concat()
+    }
+
+    TpmsAsymmetricParams(self) {
+        [
+            self.symmetric.to_tpm(),
+            self.scheme.to_tpm(),
+        ].concat()
+    }
+
+    TpmtAsymmetricScheme(self) {
+        [
+            self.scheme.to_tpm(),
+            self.details.to_tpm(),
+        ].concat()
+    }
 }
 
 impl_from_tpm! {
+    Tpm2BPublic(v) {
+        if v.len() < 2 {
+            return Err(TpmError::create_parse_error("Length mismatch").into());
+        }
+        let (len, v) = (u16be(&v[0..2]) as usize, &v[2..]);
+        Ok(if len == 0 {
+            (Tpm2BPublic {
+                public_area: None
+            }, v)
+        } else {
+            let (res, v) = TpmtPublic::from_tpm(v)?;
+            (Tpm2BPublic { public_area: Some(res) }, v)
+        })
+    }
+
     TpmtPublic(v) {
         let (algorithm_type, v) = TpmiAlgorithmPublic::from_tpm(v)?;
         let (algorithm_name, v) = TpmiAlgorithmHash::from_tpm(v)?;
@@ -181,6 +256,34 @@ impl_from_tpm! {
         let (hash_algorithm, v) = TpmiAlgorithmHash::from_tpm(v)?;
         Ok((TpmsSchemeHash { hash_algorithm }, v))
     }
+
+    TpmsRsaParams(v) {
+        let (symmetric, v) = TpmtSymdefObject::from_tpm(v)?;
+        let (scheme, v) = TpmtRsaScheme::from_tpm(v)?;
+        let (key_bits, v) = TpmKeyBits::from_tpm(v)?;
+        let (exponent, v) = u32::from_tpm(v)?;
+
+        Ok((TpmsRsaParams {
+            symmetric,
+            scheme,
+            key_bits,
+            exponent,
+        }, v))
+    }
+
+    TpmtRsaScheme(v) {
+        let (scheme, v) = TpmiAlgorithmRsaScheme::from_tpm(v)?;
+        let scheme_asym : TpmiAlgorithmAsymmetricScheme =
+            num_traits::FromPrimitive::from_u32(
+                num_traits::ToPrimitive::to_u32(&scheme).unwrap()
+            ).unwrap();
+        let (details, v) = TpmuAsymmetricScheme::from_tpm(v, &scheme_asym)?;
+
+        Ok((TpmtRsaScheme {
+            scheme,
+            details,
+        }, v))
+    }
 }
 
 impl_from_tpm_with_selector! {
@@ -189,6 +292,9 @@ impl_from_tpm_with_selector! {
         if HashSet::from([TpmAlgorithmType::Symmetric]).is_subset(&t) {
             let (ret, v) = TpmsSymcipherParams::from_tpm(v)?;
             Ok((TpmuPublicParams::SymDetail(ret), v))
+        } else if selector == &TpmiAlgorithmPublic::Rsa {
+            let (ret, v) = TpmsRsaParams::from_tpm(v)?;
+            Ok((TpmuPublicParams::RsaDetail(ret), v))
         } else {
             Err(TpmError::create_parse_error(&format!(
                 "Invalid selector specified: {:?}",
@@ -285,5 +391,17 @@ impl_from_tpm_with_selector! {
             ))
             .into());
         })
+    }
+}
+
+impl Tpm2BPublic {
+    pub fn new(public_area: TpmtPublic) -> Self {
+        Self {
+            public_area: Some(public_area),
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self { public_area: None }
     }
 }

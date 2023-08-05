@@ -59,22 +59,26 @@ impl TpmSession {
     }
 
     pub fn generate(&self, cmd: &Tpm2Command) -> TpmAuthCommand {
-        let cphash = cmd.cphash(self.algorithm);
-        let nonce = &self.nonce_caller;
-        // 19.6.8 "the number of bits returned is the size of the digest produced by sessionAlg"
-        // cphash.len() == the number of bytes sessionAlg's output
-        let bits = cphash.len() as u32 * 8;
-        let target_data = [
-            cphash,
-            [nonce.current_nonce.as_slice(), nonce.prev_nonce.as_slice()].concat(),
-            self.attributes.to_tpm(),
-        ]
-        .concat();
-        let _hmac = self.algorithm.hmac(
-            &self.generate_session_key(vec![], vec![], bits),
-            &target_data,
-        );
-        let hmac = vec![];
+        let hmac =
+            if self.bind == TpmPermanentHandle::Null && self.tpm_key == TpmPermanentHandle::Null {
+                vec![]
+            } else {
+                let cphash = cmd.cphash(self.algorithm);
+                let nonce = &self.nonce_caller;
+                // 19.6.8 "the number of bits returned is the size of the digest produced by sessionAlg"
+                // cphash.len() == the number of bytes sessionAlg's output
+                let bits = cphash.len() as u32 * 8;
+                let target_data = [
+                    cphash,
+                    [nonce.current_nonce.as_slice(), nonce.prev_nonce.as_slice()].concat(),
+                    self.attributes.to_tpm(),
+                ]
+                .concat();
+                self.algorithm.hmac(
+                    &self.generate_session_key(vec![], vec![], bits),
+                    &target_data,
+                )
+            };
         TpmAuthCommand::new(
             self.handle,
             &self.nonce_caller.current_nonce,
