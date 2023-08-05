@@ -10,6 +10,7 @@ A protocol stack of TPM (Trusted Platform Module) over I2C.
 * [TCG PC Client Platform TPM Profile (PTP) Specification](https://trustedcomputinggroup.org/resource/pc-client-platform-tpm-profile-ptp-specification/)
 * [TCG TPM I2C Interface Specification](https://trustedcomputinggroup.org/resource/tcg-tpm-i2c-interface-specification/)
 * [TCG PC Client Device Driver Design Principles for TPM 2.0](https://trustedcomputinggroup.org/resource/tcg-pc-client-device-driver-design-principles-for-tpm-2-0/)
+* [NIST SP 800-108 rev. 1 Recommendation for Key Derivation Using Pseudorandom Functions](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-108r1.pdf)
 * [microsoft / TSS.MSR](https://github.com/microsoft/TSS.MSR)
 * [infineon / optiga-tpm-cheatsheet](https://github.com/Infineon/optiga-tpm-cheatsheet)
 * [google / go-tpm](https://github.com/google/go-tpm)

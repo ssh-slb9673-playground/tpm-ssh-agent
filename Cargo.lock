@@ -282,6 +282,7 @@ version = "0.1.0"
 dependencies = [
  "bitfield-struct",
  "bitflags 2.3.3",
+ "digest",
  "enum-iterator",
  "hex-literal",
  "hidapi",

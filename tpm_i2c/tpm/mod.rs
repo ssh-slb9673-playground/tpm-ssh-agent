@@ -4,6 +4,7 @@ use std::backtrace::Backtrace;
 use structure::{Tpm2Command, TpmResponseCode, TpmResponseCodeFormat0, TpmiYesNo};
 
 pub mod commands;
+mod crypto;
 mod i2c;
 pub mod structure;
 

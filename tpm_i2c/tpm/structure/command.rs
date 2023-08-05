@@ -1,7 +1,9 @@
+use crate::tpm::crypto::get_name_of_handle;
+use crate::tpm::structure::{
+    Tpm2CommandCode, TpmAuthCommand, TpmHandle, TpmStructureTag, TpmiAlgorithmHash,
+};
 use crate::tpm::{ToTpm, TpmDataVec};
 use crate::util::p32be;
-
-use crate::tpm::structure::{Tpm2CommandCode, TpmAuthCommand, TpmHandle, TpmStructureTag};
 
 #[derive(Debug)]
 pub struct Tpm2Command {
@@ -10,6 +12,7 @@ pub struct Tpm2Command {
     pub handles: Vec<TpmHandle>,
     pub auth_area: Vec<TpmAuthCommand>,
     pub params: Vec<Box<dyn ToTpm>>,
+    cphash_raw: Vec<u8>,
 }
 
 impl Tpm2Command {
@@ -18,12 +21,16 @@ impl Tpm2Command {
         command_code: Tpm2CommandCode,
         params: Vec<Box<dyn ToTpm>>,
     ) -> Self {
+        let mut cphash_raw = vec![];
+        cphash_raw.extend_from_slice(&command_code.to_tpm());
+        cphash_raw.extend_from_slice(&params.to_tpm());
         Tpm2Command {
             tag,
             command_code,
             handles: vec![],
             auth_area: vec![],
             params,
+            cphash_raw,
         }
     }
 
@@ -34,13 +41,24 @@ impl Tpm2Command {
         auth_area: Vec<TpmAuthCommand>,
         params: Vec<Box<dyn ToTpm>>,
     ) -> Self {
+        let mut cphash_raw = vec![];
+        cphash_raw.extend_from_slice(&command_code.to_tpm());
+        for handle in &handles {
+            cphash_raw.extend_from_slice(&get_name_of_handle(*handle));
+        }
+        cphash_raw.extend_from_slice(&params.to_tpm());
         Tpm2Command {
             tag,
             command_code,
             handles,
             auth_area,
             params,
+            cphash_raw,
         }
+    }
+
+    pub fn cphash(&self, algorithm: TpmiAlgorithmHash) -> Vec<u8> {
+        algorithm.digest(&self.cphash_raw)
     }
 }
 
@@ -70,11 +88,5 @@ impl ToTpm for Tpm2Command {
             params,
         ]
         .concat()
-        /*} else if self.tag == TpmStructureTag::NoSessions {
-            let size: u32 = (tag.len() + cc.len() + params.len()) as u32 + 4;
-            [tag, p32be(size).to_vec(), cc, params].concat()
-        } else {
-            unreachable!();
-        }*/
     }
 }
