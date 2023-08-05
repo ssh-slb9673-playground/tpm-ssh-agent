@@ -5,6 +5,17 @@ use crate::TpmResult;
 use bitfield_struct::bitfield;
 
 #[bitfield(u8)]
+pub struct TpmAttrLocality {
+    pub tpm_loc_zero: bool,
+    pub tpm_loc_one: bool,
+    pub tpm_loc_two: bool,
+    pub tpm_loc_three: bool,
+    pub tpm_loc_four: bool,
+    #[bits(3)]
+    pub extended: u8,
+}
+
+#[bitfield(u8)]
 pub struct TpmAttrSession {
     pub continue_session: bool,
     pub audit_exclusive: bool,
@@ -56,6 +67,10 @@ pub struct TpmAttrObject {
 }
 
 impl_to_tpm! {
+    TpmAttrLocality(self) {
+        vec![self.0]
+    }
+
     TpmAttrSession(self) {
         vec![self.0]
     }
@@ -70,6 +85,14 @@ impl_to_tpm! {
 }
 
 impl_from_tpm! {
+    TpmAttrLocality(v) {
+        if v.is_empty() {
+            Err(TpmError::create_parse_error("length mismatch").into())
+        } else {
+            Ok((TpmAttrLocality::from(v[0]), &v[1..]))
+        }
+    }
+
     TpmAttrSession(v) {
         if v.is_empty() {
             Err(TpmError::create_parse_error("length mismatch").into())

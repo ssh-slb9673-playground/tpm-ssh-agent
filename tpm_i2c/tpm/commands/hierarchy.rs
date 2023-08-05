@@ -3,10 +3,11 @@ use crate::tpm::session::TpmSession;
     Ref. [TCG TPM 2.0 Library Part3] Section 24. "Hierarchy Commands"
 */
 use crate::tpm::structure::{
-    Tpm2BData, Tpm2BPublic, Tpm2BSensitiveCreate, Tpm2Command, Tpm2CommandCode, Tpm2Response,
-    TpmHandle, TpmResponseCode, TpmStructureTag, TpmlPcrSelection,
+    Tpm2BCreationData, Tpm2BData, Tpm2BDigest, Tpm2BName, Tpm2BPublic, Tpm2BSensitiveCreate,
+    Tpm2Command, Tpm2CommandCode, TpmHandle, TpmResponseCode, TpmStructureTag, TpmlPcrSelection,
+    TpmtTicketCreation,
 };
-use crate::tpm::{I2CTpmAccessor, Tpm, TpmError};
+use crate::tpm::{FromTpm, I2CTpmAccessor, Tpm, TpmError};
 use crate::TpmResult;
 
 impl<T: I2CTpmAccessor> Tpm<'_, T> {
@@ -18,7 +19,7 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
         in_public: Tpm2BPublic,
         outside_info: Tpm2BData,
         creation_pcr: TpmlPcrSelection,
-    ) -> TpmResult<Tpm2Response> {
+    ) -> TpmResult<Tpm2CreatePrimaryResponse> {
         let res = self.execute_with_session(
             &Tpm2Command::new_with_session(
                 TpmStructureTag::Sessions,
@@ -34,11 +35,35 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
             ),
             1,
         )?;
-        dbg!(&res);
+
         if res.response_code != TpmResponseCode::Success {
             Err(TpmError::UnsuccessfulResponse(res.response_code).into())
         } else {
-            Ok(res)
+            let v = &res.params;
+            let (out_public, v) = Tpm2BPublic::from_tpm(v)?;
+            let (creation_data, v) = Tpm2BCreationData::from_tpm(v)?;
+            let (creation_hash, v) = Tpm2BDigest::from_tpm(v)?;
+            let (creation_ticket, v) = TpmtTicketCreation::from_tpm(v)?;
+            let (name, v) = Tpm2BName::from_tpm(v)?;
+
+            dbg!(v);
+
+            Ok(Tpm2CreatePrimaryResponse {
+                out_public,
+                creation_data,
+                creation_hash,
+                creation_ticket,
+                name,
+            })
         }
     }
+}
+
+#[derive(Debug)]
+pub struct Tpm2CreatePrimaryResponse {
+    pub out_public: Tpm2BPublic,
+    pub creation_data: Tpm2BCreationData,
+    pub creation_hash: Tpm2BDigest,
+    pub creation_ticket: TpmtTicketCreation,
+    pub name: Tpm2BName,
 }

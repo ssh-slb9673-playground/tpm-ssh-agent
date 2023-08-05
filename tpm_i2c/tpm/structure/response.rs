@@ -195,6 +195,7 @@ impl FromTpm for TpmResponseCode {
 pub struct Tpm2Response {
     pub tag: TpmStructureTag,
     pub response_code: TpmResponseCode,
+    pub handles: Vec<TpmHandle>,
     pub params: Vec<u8>,
     pub auth_area: Vec<TpmAuthResponse>,
     rphash_raw: Vec<u8>,
@@ -253,6 +254,7 @@ impl Tpm2Response {
             Ok(Tpm2Response {
                 tag,
                 response_code,
+                handles,
                 params: params.to_vec(),
                 auth_area,
                 rphash_raw,
@@ -262,6 +264,7 @@ impl Tpm2Response {
             Ok(Tpm2Response {
                 tag,
                 response_code,
+                handles: vec![],
                 auth_area: vec![],
                 params: v.to_vec(),
                 rphash_raw,
