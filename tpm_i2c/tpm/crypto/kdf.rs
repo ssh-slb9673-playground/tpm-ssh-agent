@@ -40,7 +40,7 @@ pub fn kdf_a(
     let mut res = vec![];
     let mut generated_len = 0;
     let target_len = ((num_of_bits + 7) / 8) as usize;
-    let mut i = 0;
+    let mut i = 1;
     let context = [context_u, context_v].concat();
     loop {
         let buf = key_iteration(algorithm_hash, i, secret_key, label, &context, num_of_bits);

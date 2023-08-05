@@ -1,4 +1,4 @@
-use crate::tpm::{I2CTpmAccessor, Tpm, TpmError};
+use crate::tpm::{I2CTpmAccessor, Tpm};
 use crate::util::{p32le, u16le, u32le};
 use crate::TpmResult;
 use bitfield_struct::bitfield;

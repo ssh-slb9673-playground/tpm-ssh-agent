@@ -1,7 +1,6 @@
 use crate::tpm::crypto::get_name_of_handle;
-use crate::tpm::structure::{
-    Tpm2CommandCode, TpmAuthCommand, TpmHandle, TpmStructureTag, TpmiAlgorithmHash,
-};
+use crate::tpm::session::TpmSession;
+use crate::tpm::structure::{Tpm2CommandCode, TpmHandle, TpmStructureTag, TpmiAlgorithmHash};
 use crate::tpm::{ToTpm, TpmDataVec};
 use crate::util::p32be;
 
@@ -10,7 +9,7 @@ pub struct Tpm2Command {
     pub tag: TpmStructureTag,
     pub command_code: Tpm2CommandCode,
     pub handles: Vec<TpmHandle>,
-    pub auth_area: Vec<TpmAuthCommand>,
+    pub auth_area: Vec<TpmSession>,
     pub params: Vec<Box<dyn ToTpm>>,
     cphash_raw: Vec<u8>,
 }
@@ -38,7 +37,7 @@ impl Tpm2Command {
         tag: TpmStructureTag,
         command_code: Tpm2CommandCode,
         handles: Vec<TpmHandle>,
-        auth_area: Vec<TpmAuthCommand>,
+        auth_area: Vec<TpmSession>,
         params: Vec<Box<dyn ToTpm>>,
     ) -> Self {
         let mut cphash_raw = vec![];
@@ -67,9 +66,12 @@ impl ToTpm for Tpm2Command {
         let tag = self.tag.to_tpm();
         let cc = self.command_code.to_tpm();
         let params: Vec<u8> = self.params.to_tpm();
-        // if self.tag == TpmStructureTag::Sessions {
         let handles = self.handles.to_tpm();
-        let auth_area = self.auth_area.to_tpm();
+        let mut auth_area = vec![];
+        for session in &self.auth_area {
+            auth_area.push(session.generate(self));
+        }
+        let auth_area = auth_area.to_tpm();
         let auth_size = auth_area.len();
         let size: u32 = (tag.len() + cc.len() + handles.len() + auth_size + params.len()) as u32
             + 4

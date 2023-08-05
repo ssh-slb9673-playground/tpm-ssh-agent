@@ -57,7 +57,7 @@ pub enum TpmStartupType {
 }
 
 // TPM_RC
-#[derive(FromPrimitive, ToPrimitive, Debug)]
+#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq, Clone)]
 #[repr(u32)]
 pub enum TpmPermanentHandle {
     Password = 0x40000009,

@@ -6,6 +6,7 @@ use structure::{Tpm2Command, TpmResponseCode, TpmResponseCodeFormat0, TpmiYesNo}
 pub mod commands;
 mod crypto;
 mod i2c;
+pub mod session;
 pub mod structure;
 
 #[derive(Debug)]

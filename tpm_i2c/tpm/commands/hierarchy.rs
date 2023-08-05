@@ -1,9 +1,10 @@
+use crate::tpm::session::TpmSession;
 /**
     Ref. [TCG TPM 2.0 Library Part3] Section 24. "Hierarchy Commands"
 */
 use crate::tpm::structure::{
     Tpm2BData, Tpm2BPublic, Tpm2BSensitiveCreate, Tpm2Command, Tpm2CommandCode, Tpm2Response,
-    TpmAuthCommand, TpmHandle, TpmResponseCode, TpmStructureTag, TpmlPcrSelection,
+    TpmHandle, TpmResponseCode, TpmStructureTag, TpmlPcrSelection,
 };
 use crate::tpm::{I2CTpmAccessor, Tpm, TpmError};
 use crate::TpmResult;
@@ -12,7 +13,7 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
     pub fn create_primary(
         &mut self,
         primary_handle: TpmHandle,
-        auth_area: TpmAuthCommand,
+        auth_area: TpmSession,
         in_sensitive: Tpm2BSensitiveCreate,
         in_public: Tpm2BPublic,
         outside_info: Tpm2BData,

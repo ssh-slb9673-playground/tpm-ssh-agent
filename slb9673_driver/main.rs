@@ -2,6 +2,7 @@ mod driver;
 
 #[allow(unused_must_use)]
 fn main() -> tpm_i2c::TpmResult<()> {
+    use tpm_i2c::tpm::session::TpmSession;
     use tpm_i2c::tpm::structure::*;
     use tpm_i2c::tpm::Tpm;
 
@@ -43,16 +44,22 @@ fn main() -> tpm_i2c::TpmResult<()> {
         TpmiAlgorithmHash::Sha256,
     )?;
 
+    let mut session = TpmSession::new(
+        TpmiAlgorithmHash::Sha256,
+        handle,
+        TpmAttrSession::new().with_continue_session(true),
+        TpmPermanentHandle::Null,
+        TpmPermanentHandle::Null,
+    );
+
+    session.set_caller_nonce(caller_nonce_first);
+    session.set_tpm_nonce(tpm_nonce.buffer);
+
     println!("Session handle: {:08x}", handle);
 
     let res = tpm.create_primary(
         TpmPermanentHandle::Owner.into(),
-        TpmAuthCommand {
-            session_handle: handle,
-            nonce: Tpm2BNonce::new(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-            session_attributes: TpmAttrSession::new().with_continue_session(true),
-            hmac: Tpm2BAuth::new(&[]),
-        },
+        session.clone(),
         Tpm2BSensitiveCreate {
             sensitive: TpmsSensitiveCreate {
                 user_auth: Tpm2BAuth::new("initial auth value".as_bytes()),
