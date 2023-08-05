@@ -13,8 +13,7 @@ fn remove_handles(
     {
         for handle in &x.handle {
             println!("[+] Flush 0x{:08x}", handle);
-            let x = &tpm.flush_context(*handle);
-            dbg!(x);
+            let _ = &tpm.flush_context(*handle);
         }
     }
     Ok(())
@@ -148,8 +147,20 @@ fn main() -> tpm_i2c::TpmResult<()> {
         TpmlPcrSelection {
             pcr_selections: vec![],
         },
-    );
-    dbg!(res);
+    )?;
+
+    println!("Key handle: {:08x}", res.handle);
+
+    if let TpmuPublicParams::RsaDetail(params) =
+        &res.out_public.public_area.as_ref().unwrap().parameters
+    {
+        if let TpmuPublicIdentifier::Rsa(data) =
+            &res.out_public.public_area.as_ref().unwrap().unique
+        {
+            println!("N = {:x?}", &data.buffer);
+            println!("e = 0x{:x?}", &params.exponent);
+        }
+    }
 
     // println!("{:?}", tpm.read_status()?);
 
