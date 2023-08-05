@@ -81,6 +81,8 @@ impl I2CTpmAccessor for MCP2221A {
             return Err(Error::Hardware);
         }
         let mut offset = 0;
+        let mut retry = 0;
+        let retry_max = read_size * 5 / 60;
         while offset < read_size {
             self.device.write(&[0x40u8, 0, 0, 0])?;
             let mut tmp = [0u8; 65];
@@ -91,15 +93,21 @@ impl I2CTpmAccessor for MCP2221A {
             // tmp[1] == 0x41 <=> "Error reading the I2C client data from the I2C engine"
             // tmp[3] == 127 <=> "This value is signaled when an error has occurred and the following data should not be taken into account"
             if tmp[1] == 0x41 || tmp[3] == 127 {
-                return Err(Error::Hardware);
+                retry += 1;
+                if retry == retry_max {
+                    dbg!(&read_buf);
+                    return Err(Error::Hardware);
+                }
+                sleep(Duration::from_millis(5));
+                continue;
             }
             if l == 0 {
                 break;
             }
             read_buf[offset..(l + offset)].copy_from_slice(&tmp[4..(l + 4)]);
             offset += l;
-            self.wait_busy()?;
         }
+        self.wait_busy()?;
         Ok(())
     }
 

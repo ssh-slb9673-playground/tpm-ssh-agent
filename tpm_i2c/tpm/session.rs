@@ -62,15 +62,19 @@ impl TpmSession {
         let cphash = cmd.cphash(self.algorithm);
         let nonce = &self.nonce_caller;
         // 19.6.8 "the number of bits returned is the size of the digest produced by sessionAlg"
+        // cphash.len() == the number of bytes sessionAlg's output
+        let bits = cphash.len() as u32 * 8;
+        let target_data = [
+            cphash,
+            [nonce.current_nonce.as_slice(), nonce.prev_nonce.as_slice()].concat(),
+            self.attributes.to_tpm(),
+        ]
+        .concat();
         let hmac = self.algorithm.hmac(
-            &self.generate_session_key(vec![], vec![], cphash.len() as u32 * 8),
-            &[
-                cphash,
-                [nonce.current_nonce.as_slice(), nonce.prev_nonce.as_slice()].concat(),
-                self.attributes.to_tpm(),
-            ]
-            .concat(),
+            &self.generate_session_key(vec![], vec![], bits),
+            &target_data,
         );
+        let hmac = vec![];
         TpmAuthCommand::new(
             self.handle,
             &self.nonce_caller.current_nonce,

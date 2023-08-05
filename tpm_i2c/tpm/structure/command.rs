@@ -57,6 +57,7 @@ impl Tpm2Command {
     }
 
     pub fn cphash(&self, algorithm: TpmiAlgorithmHash) -> Vec<u8> {
+        dbg!(&self.cphash_raw);
         algorithm.digest(&self.cphash_raw)
     }
 }

@@ -229,7 +229,7 @@ impl Tpm2Response {
 
         if tag == TpmStructureTag::Sessions {
             let mut handles = vec![];
-            for _ in 1..handles_count {
+            for _ in 0..handles_count {
                 #[allow(unused)]
                 let (handle, tmp) = TpmHandle::from_tpm(v)?;
                 v = tmp;
