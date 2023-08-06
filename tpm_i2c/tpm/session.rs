@@ -1,7 +1,7 @@
 use crate::tpm::crypto::kdf_a;
 use crate::tpm::structure::{
-    Tpm2Command, TpmAttrSession, TpmAuthCommand, TpmHandle, TpmiAlgorithmHash, TpmiDhEntity,
-    TpmiDhObject,
+    Tpm2Command, Tpm2Response, TpmAttrSession, TpmAuthCommand, TpmHandle, TpmiAlgorithmHash,
+    TpmiDhEntity, TpmiDhObject,
 };
 use crate::tpm::ToTpm;
 use serde::{Deserialize, Serialize};
@@ -10,26 +10,12 @@ use serde::{Deserialize, Serialize};
 pub struct TpmSession {
     pub algorithm: TpmiAlgorithmHash,
     pub handle: TpmHandle,
-    pub nonce_caller: TpmSessionNonce,
-    pub nonce_tpm: TpmSessionNonce,
+    pub nonce: (Vec<u8>, Vec<u8>),
+    pub nonce_caller: Vec<u8>,
+    pub nonce_tpm: Vec<u8>,
     pub attributes: TpmAttrSession,
     pub bind: TpmiDhEntity,
     pub tpm_key: TpmiDhObject,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TpmSessionNonce {
-    current_nonce: Vec<u8>,
-    prev_nonce: Vec<u8>,
-}
-
-impl TpmSessionNonce {
-    pub fn new(current_nonce: Vec<u8>, prev_nonce: Vec<u8>) -> TpmSessionNonce {
-        TpmSessionNonce {
-            current_nonce,
-            prev_nonce,
-        }
-    }
 }
 
 impl TpmSession {
@@ -39,51 +25,52 @@ impl TpmSession {
         attributes: TpmAttrSession,
         bind: TpmiDhEntity,
         tpm_key: TpmiDhObject,
+        nonce_caller: Vec<u8>,
+        nonce_tpm: Vec<u8>,
     ) -> TpmSession {
         TpmSession {
             algorithm,
             handle,
-            nonce_caller: TpmSessionNonce::new(vec![], vec![]),
-            nonce_tpm: TpmSessionNonce::new(vec![], vec![]),
+            nonce: (nonce_tpm.clone(), nonce_caller.clone()),
+            nonce_caller,
+            nonce_tpm,
             attributes,
             bind,
             tpm_key,
         }
     }
 
-    pub fn set_caller_nonce(&mut self, nonce: Vec<u8>) {
-        self.nonce_caller = TpmSessionNonce::new(nonce, self.nonce_caller.current_nonce.clone());
-    }
-
-    pub fn set_tpm_nonce(&mut self, nonce: Vec<u8>) {
-        self.nonce_tpm = TpmSessionNonce::new(nonce, self.nonce_tpm.current_nonce.clone());
+    pub fn set_nonce(&mut self, nonce: Vec<u8>) {
+        self.nonce = (nonce, self.nonce.0.clone());
     }
 
     pub fn generate(&self, cmd: &Tpm2Command) -> TpmAuthCommand {
-        let hmac = if self.bind == TpmiDhEntity::Null && self.tpm_key == TpmiDhObject::Null {
-            vec![]
-        } else {
-            let cphash = cmd.cphash(self.algorithm);
-            let nonce = &self.nonce_caller;
-            // 19.6.8 "the number of bits returned is the size of the digest produced by sessionAlg"
-            // cphash.len() == the number of bytes sessionAlg's output
-            let bits = cphash.len() as u32 * 8;
-            let target_data = [
-                cphash,
-                [nonce.current_nonce.as_slice(), nonce.prev_nonce.as_slice()].concat(),
-                self.attributes.to_tpm(),
-            ]
-            .concat();
-            self.algorithm.hmac(
-                &self.generate_session_key(vec![], vec![], bits),
-                &target_data,
-            )
-        };
-        TpmAuthCommand::new(
-            self.handle,
-            &self.nonce_caller.current_nonce,
-            self.attributes,
-            &hmac,
+        let cphash = cmd.cphash(self.algorithm);
+        let hmac = self.compute_hmac(cphash, cmd.auth_value.clone());
+        TpmAuthCommand::new(self.handle, &self.nonce.0, self.attributes, &hmac)
+    }
+
+    pub fn validate(&self, res: &Tpm2Response, auth_value: Vec<u8>, expected: &Vec<u8>) -> bool {
+        let rphash = res.rphash(self.algorithm);
+        &self.compute_hmac(rphash, auth_value) == expected
+    }
+
+    fn compute_hmac(&self, phash: Vec<u8>, auth_value: Vec<u8>) -> Vec<u8> {
+        let nonce_newer = &self.nonce.0;
+        let nonce_older = &self.nonce.1;
+        // 19.6.8 "the number of bits returned is the size of the digest produced by sessionAlg"
+        // phash.len() == the number of bytes sessionAlg's output
+        let bits = phash.len() as u32 * 8;
+        let target_data = [
+            phash,
+            nonce_newer.to_vec(),
+            nonce_older.to_vec(),
+            self.attributes.to_tpm(),
+        ]
+        .concat();
+        self.algorithm.hmac(
+            &[self.generate_session_key(vec![], vec![], bits), auth_value].concat(),
+            &target_data,
         )
     }
 
@@ -109,9 +96,9 @@ impl TpmSession {
         kdf_a(
             &self.algorithm,
             &data,
-            &[0x41, 0x54, 0x48, 0x00],
-            &self.nonce_tpm.current_nonce,
-            &self.nonce_caller.current_nonce,
+            "ATH".as_bytes(),
+            &self.nonce_tpm,
+            &self.nonce_caller,
             bits,
         )
     }

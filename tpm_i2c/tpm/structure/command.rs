@@ -5,6 +5,7 @@ use crate::tpm::structure::{
 };
 use crate::tpm::{ToTpm, TpmDataVec};
 use crate::util::p32be;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Tpm2Command {
@@ -13,7 +14,8 @@ pub struct Tpm2Command {
     pub handles: Vec<TpmHandle>,
     pub auth_area: Vec<TpmSession>,
     pub params: Vec<Box<dyn ToTpm>>,
-    cphash_raw: Vec<u8>,
+    pub auth_value: Vec<u8>,
+    handle_public_map: HashMap<TpmHandle, TpmtPublic>,
 }
 
 impl Tpm2Command {
@@ -22,49 +24,52 @@ impl Tpm2Command {
         command_code: Tpm2CommandCode,
         params: Vec<Box<dyn ToTpm>>,
     ) -> Self {
-        let mut cphash_raw = vec![];
-        cphash_raw.extend_from_slice(&command_code.to_tpm());
-        cphash_raw.extend_from_slice(&params.to_tpm());
         Tpm2Command {
             tag,
             command_code,
             handles: vec![],
             auth_area: vec![],
+            auth_value: vec![],
             params,
-            cphash_raw,
+            handle_public_map: HashMap::new(),
         }
     }
 
-    pub fn new_with_session<F>(
+    pub fn new_with_session(
         tag: TpmStructureTag,
         command_code: Tpm2CommandCode,
         handles: Vec<TpmHandle>,
         auth_area: Vec<TpmSession>,
+        auth_value: Vec<u8>,
         params: Vec<Box<dyn ToTpm>>,
-        handle_to_public: F,
-    ) -> Self
-    where
-        F: Fn(TpmHandle) -> TpmtPublic,
-    {
-        let mut cphash_raw = vec![];
-        cphash_raw.extend_from_slice(&command_code.to_tpm());
-        for handle in &handles {
-            cphash_raw.extend_from_slice(&get_name_of_handle(*handle, &handle_to_public));
-        }
-        cphash_raw.extend_from_slice(&params.to_tpm());
+    ) -> Self {
         Tpm2Command {
             tag,
             command_code,
             handles,
             auth_area,
+            auth_value,
             params,
-            cphash_raw,
+            handle_public_map: HashMap::new(),
         }
     }
 
+    pub fn set_public_object_for_handle(&mut self, handle: TpmHandle, public: TpmtPublic) {
+        let _ = self.handle_public_map.insert(handle, public);
+    }
+
     pub fn cphash(&self, algorithm: TpmiAlgorithmHash) -> Vec<u8> {
-        dbg!(&self.cphash_raw);
-        algorithm.digest(&self.cphash_raw)
+        let mut cphash_raw = vec![];
+        cphash_raw.extend_from_slice(&self.command_code.to_tpm());
+        for handle in &self.handles {
+            cphash_raw.extend_from_slice(&get_name_of_handle(*handle, |h| {
+                self.handle_public_map
+                    .get(&h)
+                    .expect("Invalid handle specified")
+            }));
+        }
+        cphash_raw.extend_from_slice(&self.params.to_tpm());
+        algorithm.digest(&cphash_raw)
     }
 }
 

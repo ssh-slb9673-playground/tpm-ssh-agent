@@ -1,5 +1,6 @@
 mod driver;
 mod state;
+use rand::prelude::*;
 use state::State;
 use std::path::Path;
 use tpm_i2c::tpm::session::TpmSession;
@@ -84,8 +85,9 @@ fn create_primary_key<T: I2CTpmAccessor>(
     auth_value: &[u8],
 ) -> Result<tpm_i2c::tpm::commands::Tpm2CreatePrimaryResponse> {
     tpm.create_primary(
-        TpmPermanentHandle::Platform.into(),
+        TpmPermanentHandle::Owner.into(),
         session,
+        vec![],
         Tpm2BSensitiveCreate {
             sensitive: TpmsSensitiveCreate {
                 user_auth: Tpm2BAuth::new(auth_value),
@@ -99,7 +101,6 @@ fn create_primary_key<T: I2CTpmAccessor>(
                 .with_fixed_tpm(true)
                 .with_fixed_parent(true)
                 .with_sensitive_data_origin(true)
-                .with_no_dictionary_attack(true)
                 .with_sign_or_encrypt(true)
                 .with_user_with_auth(true),
             auth_policy: Tpm2BDigest::new(&[]),
@@ -130,6 +131,7 @@ fn create_session<T: tpm_i2c::tpm::I2CTpmAccessor>(
             mode: TpmuSymMode::Null,
         },
         TpmiAlgorithmHash::Sha256,
+        vec![],
     )
     .map_or_else(
         |err| Err(err.into()),
@@ -138,6 +140,43 @@ fn create_session<T: tpm_i2c::tpm::I2CTpmAccessor>(
             Ok(x)
         },
     )
+}
+
+fn sign<T: tpm_i2c::tpm::I2CTpmAccessor>(
+    tpm: &mut Tpm<T>,
+    state: &mut State,
+    msg: &[u8],
+) -> Result<Vec<u8>> {
+    let digest = state.session.algorithm.digest(msg);
+    let sig = tpm.sign(
+        state.primary_handle.unwrap(),
+        &mut state.session,
+        "password".as_bytes().to_vec(),
+        &digest,
+        TpmtSignatureScheme {
+            scheme: TpmiAlgorithmSigScheme::RsaPss,
+            details: TpmsSignatureScheme::AX(TpmsSchemeHash {
+                hash_algorithm: TpmiAlgorithmHash::Sha256,
+            }),
+        },
+        TpmtTicketHashCheck {
+            tag: TpmStructureTag::HashCheck,
+            hierarchy: TpmiHandleHierarchy::Owner,
+            digest: Tpm2BDigest::new(&[]),
+        },
+    )?;
+
+    Ok(match sig.details {
+        TpmuSignature::Rsa(x) => x.signature.buffer,
+        _ => todo!(),
+    })
+}
+
+fn next_nonce() -> [u8; 16] {
+    let mut rng = rand::thread_rng();
+    let mut ret = [0u8; 16];
+    rng.fill_bytes(&mut ret);
+    ret
 }
 
 #[allow(unused_must_use)]
@@ -160,7 +199,7 @@ fn main() -> Result<()> {
             println!("Reset && create states");
             remove_handles(&mut tpm, TpmHandleType::HmacOrLoadedSession)?;
             remove_handles(&mut tpm, TpmHandleType::Transient)?;
-            let session = create_session(&mut tpm, &[0; 16])?;
+            let session = create_session(&mut tpm, &next_nonce())?;
             Ok(State {
                 session,
                 primary_handle: None,
@@ -169,33 +208,19 @@ fn main() -> Result<()> {
         Ok,
     )?;
 
-    println!("Key handle: {:08x}", state.session.handle);
+    println!("session handle: {:08x}", state.session.handle);
 
     if state.primary_handle.is_none() {
+        state.session.set_nonce(next_nonce().to_vec());
         let res = create_primary_key(&mut tpm, &mut state.session, "password".as_bytes())?;
         state.primary_handle = Some(res.handle);
     }
-
     println!("state: {:?}", &state);
 
-    let digest = TpmiAlgorithmHash::Sha256.digest("Hello, World!".as_bytes());
+    state.session.set_nonce(next_nonce().to_vec());
+    let signature = sign(&mut tpm, &mut state, "hello world".as_bytes())?;
 
-    dbg!(tpm.sign(
-        state.primary_handle.unwrap(),
-        &mut state.session,
-        &digest,
-        TpmtSignatureScheme {
-            scheme: TpmiAlgorithmSigScheme::RsaPss,
-            details: TpmsSignatureScheme::AX(TpmsSchemeHash {
-                hash_algorithm: TpmiAlgorithmHash::Sha256,
-            }),
-        },
-        TpmtTicketHashCheck {
-            tag: TpmStructureTag::HashCheck,
-            hierarchy: TpmiHandleHierarchy::Null,
-            digest: Tpm2BDigest::new(&[]),
-        },
-    ));
+    println!("sign(\"hello world\") == {:x?}", &signature);
 
     state.save(state_file_path)?;
 

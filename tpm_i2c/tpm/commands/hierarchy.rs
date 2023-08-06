@@ -15,6 +15,7 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
         &mut self,
         primary_handle: TpmHandle,
         auth_area: &mut TpmSession,
+        auth_value: Vec<u8>,
         in_sensitive: Tpm2BSensitiveCreate,
         in_public: Tpm2BPublic,
         outside_info: Tpm2BData,
@@ -26,6 +27,7 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
                 Tpm2CommandCode::CreatePrimary,
                 vec![primary_handle],
                 vec![auth_area.clone()],
+                auth_value.clone(),
                 vec![
                     Box::new(in_sensitive),
                     Box::new(in_public),
@@ -35,8 +37,10 @@ impl<T: I2CTpmAccessor> Tpm<'_, T> {
             ),
             1,
         )?;
+
         if !res.auth_area.is_empty() {
-            todo!(); // rotate tpm nonce of authsession
+            auth_area.set_nonce(res.auth_area[0].nonce.buffer.clone());
+            assert!(auth_area.validate(&res, auth_value.clone(), &res.auth_area[0].hmac.buffer));
         }
 
         if res.response_code != TpmResponseCode::Success {

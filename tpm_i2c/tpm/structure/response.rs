@@ -228,14 +228,16 @@ impl Tpm2Response {
             return Err(TpmError::create_parse_error("length mismatch").into());
         }
 
-        if tag == TpmStructureTag::Sessions {
-            let mut handles = vec![];
+        let mut handles = vec![];
+        if response_code == TpmResponseCode::Success {
             for _ in 0..handles_count {
-                #[allow(unused)]
                 let (handle, tmp) = TpmHandle::from_tpm(v)?;
                 v = tmp;
                 handles.push(handle);
             }
+        }
+
+        if tag == TpmStructureTag::Sessions {
             let (parameter_size, tmp) = u32::from_tpm(v)?;
             v = tmp;
             let (params, tmp) = (&v[..parameter_size as usize], &v[parameter_size as usize..]);
@@ -244,11 +246,11 @@ impl Tpm2Response {
             let mut auth_area = vec![];
             loop {
                 let (auth, tmp) = TpmAuthResponse::from_tpm(v)?;
+                auth_area.push(auth);
                 v = tmp;
                 if v.is_empty() {
                     break;
                 }
-                auth_area.push(auth);
             }
             rphash_raw.extend_from_slice(params);
             Ok(Tpm2Response {
@@ -264,7 +266,7 @@ impl Tpm2Response {
             Ok(Tpm2Response {
                 tag,
                 response_code,
-                handles: vec![],
+                handles,
                 auth_area: vec![],
                 params: v.to_vec(),
                 rphash_raw,
