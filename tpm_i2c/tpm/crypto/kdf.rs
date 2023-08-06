@@ -1,4 +1,4 @@
-use crate::tpm::structure::{TpmHandle, TpmiAlgorithmHash};
+use crate::tpm::structure::{TpmHandle, TpmiAlgorithmHash, TpmtPublic};
 use crate::tpm::ToTpm;
 
 fn key_iteration(
@@ -54,7 +54,10 @@ pub fn kdf_a(
     res.concat()[0..target_len].to_vec()
 }
 
-pub fn get_name_of_handle(handle: TpmHandle) -> Vec<u8> {
+pub fn get_name_of_handle<F>(handle: TpmHandle, handle_to_public: F) -> Vec<u8>
+where
+    F: Fn(TpmHandle) -> TpmtPublic,
+{
     // [TCG TPM Specification Part 1] Section 16 "Names" and Table 3
     let v = handle.to_tpm();
     let mso = v[0];

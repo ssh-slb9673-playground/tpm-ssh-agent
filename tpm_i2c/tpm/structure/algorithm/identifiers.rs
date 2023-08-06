@@ -46,6 +46,7 @@ pub enum TpmAlgorithmIdentifier {
     TripleDes = 0x0003,
     #[subenum(TpmiAlgorithmHash, TpmiAlgorithmMacScheme)]
     Sha1 = 0x0004,
+    #[subenum(TpmiAlgorithmSigScheme)]
     Hmac = 0x0005,
     #[subenum(TpmiAlgorithmSymmetric, TpmiAlgorithmSymObject)]
     Aes = 0x0006,
@@ -518,10 +519,16 @@ mod test {
 
     #[test]
     fn test_sig_scheme() {
-        test_algo_least::<crate::tpm::structure::TpmiAlgorithmSigScheme>(&HashSet::from([
-            TpmAlgorithmType::Asymmetric,
-            TpmAlgorithmType::Signing,
-        ]));
+        assert_eq!(
+            to_set::<crate::tpm::structure::TpmiAlgorithmSigScheme>(),
+            extract_least::<TpmAlgorithmIdentifier>(&HashSet::from([
+                TpmAlgorithmType::Asymmetric,
+                TpmAlgorithmType::Signing,
+            ]))
+            .union(&HashSet::from([TpmAlgorithmIdentifier::Hmac]))
+            .map(|x| *x)
+            .collect::<HashSet<_>>()
+        );
     }
 
     #[test]

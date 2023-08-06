@@ -1,6 +1,8 @@
 use crate::tpm::crypto::get_name_of_handle;
 use crate::tpm::session::TpmSession;
-use crate::tpm::structure::{Tpm2CommandCode, TpmHandle, TpmStructureTag, TpmiAlgorithmHash};
+use crate::tpm::structure::{
+    Tpm2CommandCode, TpmHandle, TpmStructureTag, TpmiAlgorithmHash, TpmtPublic,
+};
 use crate::tpm::{ToTpm, TpmDataVec};
 use crate::util::p32be;
 
@@ -33,17 +35,21 @@ impl Tpm2Command {
         }
     }
 
-    pub fn new_with_session(
+    pub fn new_with_session<F>(
         tag: TpmStructureTag,
         command_code: Tpm2CommandCode,
         handles: Vec<TpmHandle>,
         auth_area: Vec<TpmSession>,
         params: Vec<Box<dyn ToTpm>>,
-    ) -> Self {
+        handle_to_public: F,
+    ) -> Self
+    where
+        F: Fn(TpmHandle) -> TpmtPublic,
+    {
         let mut cphash_raw = vec![];
         cphash_raw.extend_from_slice(&command_code.to_tpm());
         for handle in &handles {
-            cphash_raw.extend_from_slice(&get_name_of_handle(*handle));
+            cphash_raw.extend_from_slice(&get_name_of_handle(*handle, &handle_to_public));
         }
         cphash_raw.extend_from_slice(&params.to_tpm());
         Tpm2Command {

@@ -131,7 +131,13 @@ fn create_session<T: tpm_i2c::tpm::I2CTpmAccessor>(
         },
         TpmiAlgorithmHash::Sha256,
     )
-    .map_err(|err| err.into())
+    .map_or_else(
+        |err| Err(err.into()),
+        |mut x| {
+            x.attributes.set_continue_session(true);
+            Ok(x)
+        },
+    )
 }
 
 #[allow(unused_must_use)]
@@ -171,6 +177,25 @@ fn main() -> Result<()> {
     }
 
     println!("state: {:?}", &state);
+
+    let digest = TpmiAlgorithmHash::Sha256.digest("Hello, World!".as_bytes());
+
+    dbg!(tpm.sign(
+        state.primary_handle.unwrap(),
+        &mut state.session,
+        &digest,
+        TpmtSignatureScheme {
+            scheme: TpmiAlgorithmSigScheme::RsaPss,
+            details: TpmsSignatureScheme::AX(TpmsSchemeHash {
+                hash_algorithm: TpmiAlgorithmHash::Sha256,
+            }),
+        },
+        TpmtTicketHashCheck {
+            tag: TpmStructureTag::HashCheck,
+            hierarchy: TpmiHandleHierarchy::Null,
+            digest: Tpm2BDigest::new(&[]),
+        },
+    ));
 
     state.save(state_file_path)?;
 

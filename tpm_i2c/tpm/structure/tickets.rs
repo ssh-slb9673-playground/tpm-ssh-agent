@@ -4,14 +4,14 @@ use crate::tpm::{FromTpm, ToTpm};
 use crate::TpmResult;
 
 #[derive(Debug)]
-pub struct TpmtTicketCreation {
+pub struct TpmtTicketBase {
     pub tag: TpmStructureTag,
     pub hierarchy: TpmiHandleHierarchy,
     pub digest: Tpm2BDigest,
 }
 
 impl_from_tpm! {
-    TpmtTicketCreation(v) {
+    TpmtTicketBase(v) {
         let (tag, v) = TpmStructureTag::from_tpm(v)?;
         let (hierarchy, v) = TpmiHandleHierarchy::from_tpm(v)?;
         let (digest, v) = Tpm2BDigest::from_tpm(v)?;
@@ -24,7 +24,7 @@ impl_from_tpm! {
 }
 
 impl_to_tpm! {
-    TpmtTicketCreation(self) {
+    TpmtTicketBase(self) {
         [
             self.tag.to_tpm(),
             self.hierarchy.to_tpm(),
@@ -32,3 +32,6 @@ impl_to_tpm! {
         ].concat()
     }
 }
+
+pub type TpmtTicketCreation = TpmtTicketBase;
+pub type TpmtTicketHashCheck = TpmtTicketBase;

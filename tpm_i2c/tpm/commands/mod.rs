@@ -3,6 +3,7 @@ mod context;
 mod hierarchy;
 mod random_number_generator;
 mod session;
+mod sign_and_verify;
 mod startup;
 mod testing;
 

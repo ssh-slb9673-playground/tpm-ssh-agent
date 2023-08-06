@@ -1,11 +1,13 @@
 use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_from_tpm_with_selector, impl_to_tpm};
 use crate::tpm::structure::{
     Tpm2BAuth, Tpm2BSensitiveData, TpmAlgorithm, TpmAlgorithmType, TpmKeyBits, TpmiAlgorithmHash,
-    TpmiAlgorithmSymMode, TpmiAlgorithmSymObject, TpmiAlgorithmSymmetric,
+    TpmiAlgorithmSymMode, TpmiAlgorithmSymObject, TpmiAlgorithmSymmetric, TpmsSchemeHash,
 };
 use crate::tpm::{FromTpm, FromTpmWithSelector, ToTpm, TpmError, TpmResult};
 use crate::util::{p16be, u16be};
 use std::collections::HashSet;
+
+pub type TpmsSchemeHmac = TpmsSchemeHash;
 
 #[derive(Debug)]
 pub struct Tpm2BSensitiveCreate {

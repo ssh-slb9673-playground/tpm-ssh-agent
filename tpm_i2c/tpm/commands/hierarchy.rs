@@ -1,7 +1,7 @@
-use crate::tpm::session::TpmSession;
 /**
     Ref. [TCG TPM 2.0 Library Part3] Section 24. "Hierarchy Commands"
 */
+use crate::tpm::session::TpmSession;
 use crate::tpm::structure::{
     Tpm2BCreationData, Tpm2BData, Tpm2BDigest, Tpm2BName, Tpm2BPublic, Tpm2BSensitiveCreate,
     Tpm2Command, Tpm2CommandCode, TpmHandle, TpmResponseCode, TpmStructureTag, TpmlPcrSelection,
