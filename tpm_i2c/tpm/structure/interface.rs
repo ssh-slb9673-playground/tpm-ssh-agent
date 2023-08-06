@@ -14,14 +14,14 @@ pub enum TpmiYesNo {
     Yes = 1,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TpmiDhObject {
     Transient(TpmHandle),
     Persistent(TpmHandle),
     Null,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TpmiDhEntity {
     Transient(TpmHandle),
     Persistent(TpmHandle),

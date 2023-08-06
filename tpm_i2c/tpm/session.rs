@@ -1,5 +1,6 @@
 use crate::tpm::structure::{
     Tpm2Command, TpmAttrSession, TpmAuthCommand, TpmHandle, TpmPermanentHandle, TpmiAlgorithmHash,
+    TpmiDhEntity, TpmiDhObject,
 };
 
 use crate::tpm::crypto::kdf_a;
@@ -12,8 +13,8 @@ pub struct TpmSession {
     pub nonce_caller: TpmSessionNonce,
     pub nonce_tpm: TpmSessionNonce,
     pub attributes: TpmAttrSession,
-    pub bind: TpmPermanentHandle,
-    pub tpm_key: TpmPermanentHandle,
+    pub bind: TpmiDhEntity,
+    pub tpm_key: TpmiDhObject,
 }
 
 #[derive(Debug, Clone)]
@@ -36,8 +37,8 @@ impl TpmSession {
         algorithm: TpmiAlgorithmHash,
         handle: TpmHandle,
         attributes: TpmAttrSession,
-        bind: TpmPermanentHandle,
-        tpm_key: TpmPermanentHandle,
+        bind: TpmiDhEntity,
+        tpm_key: TpmiDhObject,
     ) -> TpmSession {
         TpmSession {
             algorithm,
@@ -59,26 +60,25 @@ impl TpmSession {
     }
 
     pub fn generate(&self, cmd: &Tpm2Command) -> TpmAuthCommand {
-        let hmac =
-            if self.bind == TpmPermanentHandle::Null && self.tpm_key == TpmPermanentHandle::Null {
-                vec![]
-            } else {
-                let cphash = cmd.cphash(self.algorithm);
-                let nonce = &self.nonce_caller;
-                // 19.6.8 "the number of bits returned is the size of the digest produced by sessionAlg"
-                // cphash.len() == the number of bytes sessionAlg's output
-                let bits = cphash.len() as u32 * 8;
-                let target_data = [
-                    cphash,
-                    [nonce.current_nonce.as_slice(), nonce.prev_nonce.as_slice()].concat(),
-                    self.attributes.to_tpm(),
-                ]
-                .concat();
-                self.algorithm.hmac(
-                    &self.generate_session_key(vec![], vec![], bits),
-                    &target_data,
-                )
-            };
+        let hmac = if self.bind == TpmiDhEntity::Null && self.tpm_key == TpmiDhObject::Null {
+            vec![]
+        } else {
+            let cphash = cmd.cphash(self.algorithm);
+            let nonce = &self.nonce_caller;
+            // 19.6.8 "the number of bits returned is the size of the digest produced by sessionAlg"
+            // cphash.len() == the number of bytes sessionAlg's output
+            let bits = cphash.len() as u32 * 8;
+            let target_data = [
+                cphash,
+                [nonce.current_nonce.as_slice(), nonce.prev_nonce.as_slice()].concat(),
+                self.attributes.to_tpm(),
+            ]
+            .concat();
+            self.algorithm.hmac(
+                &self.generate_session_key(vec![], vec![], bits),
+                &target_data,
+            )
+        };
         TpmAuthCommand::new(
             self.handle,
             &self.nonce_caller.current_nonce,
@@ -89,17 +89,17 @@ impl TpmSession {
 
     pub fn generate_session_key(&self, auth_value: Vec<u8>, salt: Vec<u8>, bits: u32) -> Vec<u8> {
         // [TCG TPM Specification Part 1] 19.6.8 "sessionKey Creation"
-        if self.bind == TpmPermanentHandle::Null && self.tpm_key == TpmPermanentHandle::Null {
+        if self.bind == TpmiDhEntity::Null && self.tpm_key == TpmiDhObject::Null {
             return vec![];
         }
 
         let data = [
-            if self.bind == TpmPermanentHandle::Null {
+            if self.bind == TpmiDhEntity::Null {
                 vec![]
             } else {
                 auth_value
             },
-            if self.tpm_key == TpmPermanentHandle::Null {
+            if self.tpm_key == TpmiDhObject::Null {
                 vec![]
             } else {
                 salt

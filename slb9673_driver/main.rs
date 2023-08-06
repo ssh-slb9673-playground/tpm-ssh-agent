@@ -1,4 +1,6 @@
 mod driver;
+use tpm_i2c::tpm::session::TpmSession;
+use tpm_i2c::tpm::structure::*;
 use tpm_i2c::tpm::Tpm;
 
 fn remove_handles(
@@ -19,11 +21,71 @@ fn remove_handles(
     Ok(())
 }
 
+fn get_rsa_public_template(bits: u16, symmetric: TpmtSymdefObject) -> TpmuPublicParams {
+    TpmuPublicParams::RsaDetail(TpmsRsaParams {
+        symmetric,
+        scheme: TpmtRsaScheme {
+            scheme: TpmiAlgorithmRsaScheme::RsaEs,
+            details: TpmuAsymmetricScheme::Encryption(TpmsEncryptionScheme::AE(TpmsEmpty::new())),
+        },
+        key_bits: bits,
+        exponent: 65537,
+    })
+}
+
+fn get_aes_symdefobj() -> TpmtSymdefObject {
+    TpmtSymdefObject {
+        algorithm: TpmiAlgorithmSymObject::Aes,
+        key_bits: TpmuSymKeybits::SymmetricAlgo(128),
+        mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
+    }
+}
+
+fn get_null_symdefobj() -> TpmtSymdefObject {
+    TpmtSymdefObject {
+        algorithm: TpmiAlgorithmSymObject::Null,
+        key_bits: TpmuSymKeybits::Null,
+        mode: TpmuSymMode::Null,
+    }
+}
+
+fn create_primary_key<T: tpm_i2c::tpm::I2CTpmAccessor>(
+    tpm: &mut Tpm<T>,
+    session: TpmSession,
+    auth_value: &[u8],
+) -> tpm_i2c::TpmResult<tpm_i2c::tpm::commands::Tpm2CreatePrimaryResponse> {
+    tpm.create_primary(
+        TpmPermanentHandle::Platform.into(),
+        session.clone(),
+        Tpm2BSensitiveCreate {
+            sensitive: TpmsSensitiveCreate {
+                user_auth: Tpm2BAuth::new(auth_value),
+                data: Tpm2BSensitiveData::new(&[]),
+            },
+        },
+        Tpm2BPublic::new(TpmtPublic {
+            algorithm_type: TpmiAlgorithmPublic::Rsa,
+            algorithm_name: TpmiAlgorithmHash::Sha256,
+            object_attributes: TpmAttrObject::new()
+                .with_fixed_tpm(true)
+                .with_fixed_parent(true)
+                .with_sensitive_data_origin(true)
+                .with_no_dictionary_attack(true)
+                .with_decrypt(true)
+                .with_user_with_auth(true),
+            auth_policy: Tpm2BDigest::new(&[]),
+            parameters: get_rsa_public_template(2048, get_null_symdefobj()),
+            unique: TpmuPublicIdentifier::Rsa(Tpm2BDigest::new(&[])),
+        }),
+        Tpm2BData::new(&[]),
+        TpmlPcrSelection {
+            pcr_selections: vec![],
+        },
+    )
+}
+
 #[allow(unused_must_use)]
 fn main() -> tpm_i2c::TpmResult<()> {
-    use tpm_i2c::tpm::session::TpmSession;
-    use tpm_i2c::tpm::structure::*;
-
     let mut device = driver::hidapi::MCP2221A::new(0x2e)?;
     let mut tpm = Tpm::new(&mut device)?;
     tpm.init(true)?;
@@ -34,137 +96,48 @@ fn main() -> tpm_i2c::TpmResult<()> {
     tpm.print_info()?;
 
     let caller_nonce_first = tpm.get_random(16)?;
-
-    tpm.test_params(TpmtPublicParams {
-        algorithm_type: TpmiAlgorithmPublic::Rsa,
-        parameters: TpmuPublicParams::RsaDetail(TpmsRsaParams {
-            symmetric: TpmtSymdefObject {
-                algorithm: TpmiAlgorithmSymObject::Aes,
-                key_bits: TpmuSymKeybits::SymmetricAlgo(128),
-                mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
-            },
-            scheme: TpmtRsaScheme {
-                scheme: TpmiAlgorithmRsaScheme::RsaEs,
-                details: TpmuAsymmetricScheme::Encryption(TpmsEncryptionScheme::AE(
-                    TpmsEmpty::new(),
-                )),
-            },
-            key_bits: 2048,
-            exponent: 65537,
-        }),
-    })?;
-
-    println!("Test OK");
-
-    let (_res, handle, tpm_nonce) = tpm.start_auth_session(
+    let mut session = tpm.start_auth_session(
         TpmiDhObject::Null,
         TpmiDhEntity::Null,
         Tpm2BNonce::new(&caller_nonce_first),
         Tpm2BEncryptedSecret::new(&[]),
         TpmSessionType::Hmac,
         TpmtSymdef {
-            algorithm: TpmiAlgorithmSymmetric::Aes,
-            key_bits: TpmuSymKeybits::SymmetricAlgo(128),
-            mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
+            algorithm: TpmiAlgorithmSymmetric::Null,
+            key_bits: TpmuSymKeybits::Null,
+            mode: TpmuSymMode::Null,
         },
         TpmiAlgorithmHash::Sha256,
     )?;
 
-    let mut session = TpmSession::new(
-        TpmiAlgorithmHash::Sha256,
-        handle,
-        TpmAttrSession::new().with_continue_session(true),
-        TpmPermanentHandle::Null,
-        TpmPermanentHandle::Null,
-    );
-
-    let _aes_template = Tpm2BPublic::new(TpmtPublic {
-        algorithm_type: TpmiAlgorithmPublic::SymCipher,
-        algorithm_name: TpmiAlgorithmHash::Sha256,
-        object_attributes: TpmAttrObject::new()
-            .with_fixed_tpm(true)
-            .with_fixed_parent(true)
-            .with_sensitive_data_origin(true)
-            .with_no_dictionary_attack(true)
-            .with_decrypt(true),
-        auth_policy: Tpm2BDigest::new(&[]),
-        parameters: TpmuPublicParams::SymDetail(TpmsSymcipherParams {
-            sym: TpmtSymdefObject {
-                algorithm: TpmiAlgorithmSymObject::Aes,
-                key_bits: TpmuSymKeybits::SymmetricAlgo(128),
-                mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
-            },
-        }),
-        unique: TpmuPublicIdentifier::Sym(Tpm2BDigest::new(&[])),
-    });
-
-    let _rsa_template = Tpm2BPublic::new(TpmtPublic {
-        algorithm_type: TpmiAlgorithmPublic::Rsa,
-        algorithm_name: TpmiAlgorithmHash::Sha256,
-        object_attributes: TpmAttrObject::new()
-            .with_fixed_tpm(true)
-            .with_fixed_parent(true)
-            .with_sensitive_data_origin(true)
-            .with_no_dictionary_attack(true)
-            .with_decrypt(true)
-            .with_user_with_auth(true),
-        auth_policy: Tpm2BDigest::new(&[]),
-        parameters: TpmuPublicParams::RsaDetail(TpmsRsaParams {
-            symmetric: TpmtSymdefObject {
-                algorithm: TpmiAlgorithmSymObject::Null,
-                key_bits: TpmuSymKeybits::Null,
-                mode: TpmuSymMode::Null,
-            },
-            scheme: TpmtRsaScheme {
-                scheme: TpmiAlgorithmRsaScheme::RsaEs,
-                details: TpmuAsymmetricScheme::Encryption(TpmsEncryptionScheme::AE(
-                    TpmsEmpty::new(),
-                )),
-            },
-            key_bits: 2048,
-            exponent: 65537,
-        }),
-        unique: TpmuPublicIdentifier::Sym(Tpm2BDigest::new(&[])),
-    });
-
-    session.set_caller_nonce(caller_nonce_first);
-    session.set_tpm_nonce(tpm_nonce.buffer);
     session.set_caller_nonce([0u8; 16].to_vec());
 
-    println!("Session handle: {:08x}", handle);
+    println!("Session handle: {:08x}", &session.handle);
 
-    let res = tpm.create_primary(
-        TpmPermanentHandle::Platform.into(),
-        session.clone(),
-        Tpm2BSensitiveCreate {
-            sensitive: TpmsSensitiveCreate {
-                user_auth: Tpm2BAuth::new("initial auth value".as_bytes()),
-                data: Tpm2BSensitiveData::new(&[]),
-            },
-        },
-        _rsa_template,
-        Tpm2BData::new(&[]),
-        TpmlPcrSelection {
-            pcr_selections: vec![],
-        },
-    )?;
+    let res = create_primary_key(&mut tpm, session.clone(), "password".as_bytes())?;
 
     println!("Key handle: {:08x}", res.handle);
 
-    if let TpmuPublicParams::RsaDetail(params) =
+    let e = if let TpmuPublicParams::RsaDetail(params) =
         &res.out_public.public_area.as_ref().unwrap().parameters
     {
-        if let TpmuPublicIdentifier::Rsa(data) =
-            &res.out_public.public_area.as_ref().unwrap().unique
-        {
-            println!("N = {:x?}", &data.buffer);
-            println!("e = 0x{:x?}", &params.exponent);
-        }
-    }
+        params.exponent
+    } else {
+        unreachable!()
+    };
 
-    // println!("{:?}", tpm.read_status()?);
+    let n = if let TpmuPublicIdentifier::Rsa(data) =
+        &res.out_public.public_area.as_ref().unwrap().unique
+    {
+        &data.buffer
+    } else {
+        unreachable!();
+    };
 
-    tpm.flush_context(handle)?;
+    println!("e = {:x?}", &e);
+    println!("n = {:x?}", &n);
+
+    tpm.flush_context(res.handle)?;
 
     tpm.shutdown(true)?;
 
