@@ -1,6 +1,8 @@
 mod driver;
 mod state;
 use rand::prelude::*;
+use ssh_key::public::{KeyData, RsaPublicKey};
+use ssh_key::{MPInt, PublicKey};
 use state::State;
 use std::path::Path;
 use tpm_i2c::tpm::session::TpmSession;
@@ -14,6 +16,7 @@ pub enum Error {
     IoError(std::io::Error),
     TpmError(tpm_i2c::Error),
     JsonError(serde_json::Error),
+    SshKeyError(ssh_key::Error),
 }
 
 macro_rules! error_wrapping_arm {
@@ -29,6 +32,7 @@ macro_rules! error_wrapping_arm {
 error_wrapping_arm!(std::io::Error, IoError);
 error_wrapping_arm!(tpm_i2c::Error, TpmError);
 error_wrapping_arm!(serde_json::Error, JsonError);
+error_wrapping_arm!(ssh_key::Error, SshKeyError);
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -36,6 +40,7 @@ impl std::fmt::Display for Error {
             Error::IoError(e) => write!(f, "{}", e),
             Error::TpmError(e) => write!(f, "{}", e),
             Error::JsonError(e) => write!(f, "{}", e),
+            Error::SshKeyError(e) => write!(f, "{}", e),
         }
     }
 }
@@ -218,9 +223,21 @@ fn main() -> Result<()> {
     println!("state: {:?}", &state);
 
     state.session.set_nonce(next_nonce().to_vec());
-    let signature = sign(&mut tpm, &mut state, "hello world".as_bytes())?;
+    // let signature = sign(&mut tpm, &mut state, "hello world".as_bytes())?;
 
-    println!("sign(\"hello world\") == {:x?}", &signature);
+    let public_data = tpm.read_public(state.primary_handle.unwrap())?;
+    if let Some(x) = public_data.0.public_area {
+        if let TpmuPublicIdentifier::Rsa(y) = x.unique {
+            let pubkey = PublicKey::new(
+                KeyData::Rsa(RsaPublicKey {
+                    e: MPInt::from_bytes(&[0x1, 0x00, 0x01])?,
+                    n: MPInt::from_bytes(&y.buffer)?,
+                }),
+                "",
+            );
+            println!("[+] Public key: {}", pubkey.to_openssh()?);
+        }
+    }
 
     state.save(state_file_path)?;
 
