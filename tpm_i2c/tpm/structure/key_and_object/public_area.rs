@@ -334,7 +334,6 @@ impl_from_tpm_with_selector! {
             == HashSet::from([
                 TpmAlgorithmType::Asymmetric,
                 TpmAlgorithmType::Signing,
-                TpmAlgorithmType::Hash,
             ])
         {
             let (res, v) = TpmsSchemeHash::from_tpm(v)?;

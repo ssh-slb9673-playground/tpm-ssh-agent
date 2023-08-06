@@ -1,6 +1,6 @@
 mod driver;
-mod saved_state;
-use saved_state::State;
+mod state;
+use state::State;
 use std::path::Path;
 use tpm_i2c::tpm::session::TpmSession;
 use tpm_i2c::tpm::structure::*;
@@ -60,20 +60,14 @@ fn get_rsa_public_template(bits: u16, symmetric: TpmtSymdefObject) -> TpmuPublic
     TpmuPublicParams::RsaDetail(TpmsRsaParams {
         symmetric,
         scheme: TpmtRsaScheme {
-            scheme: TpmiAlgorithmRsaScheme::RsaEs,
-            details: TpmuAsymmetricScheme::Encryption(TpmsEncryptionScheme::AE(TpmsEmpty::new())),
+            scheme: TpmiAlgorithmRsaScheme::RsaPss,
+            details: TpmuAsymmetricScheme::Signature(TpmsSignatureScheme::AX(TpmsSchemeHash {
+                hash_algorithm: TpmiAlgorithmHash::Sha256,
+            })),
         },
         key_bits: bits,
         exponent: 65537,
     })
-}
-
-fn get_aes_symdefobj() -> TpmtSymdefObject {
-    TpmtSymdefObject {
-        algorithm: TpmiAlgorithmSymObject::Aes,
-        key_bits: TpmuSymKeybits::SymmetricAlgo(128),
-        mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
-    }
 }
 
 fn get_null_symdefobj() -> TpmtSymdefObject {
@@ -106,7 +100,7 @@ fn create_primary_key<T: I2CTpmAccessor>(
                 .with_fixed_parent(true)
                 .with_sensitive_data_origin(true)
                 .with_no_dictionary_attack(true)
-                .with_decrypt(true)
+                .with_sign_or_encrypt(true)
                 .with_user_with_auth(true),
             auth_policy: Tpm2BDigest::new(&[]),
             parameters: get_rsa_public_template(2048, get_null_symdefobj()),
@@ -150,19 +144,24 @@ fn main() -> Result<()> {
 
     tpm.print_info()?;
 
-    let mut state = match State::load(state_file_path)? {
-        Some(x) => x,
-        None => {
+    tpm.test_params(TpmtPublicParams {
+        algorithm_type: TpmiAlgorithmPublic::Rsa,
+        parameters: get_rsa_public_template(2048, get_null_symdefobj()),
+    })?;
+
+    let mut state: State = State::load(state_file_path)?.map_or_else(
+        || -> Result<State> {
             println!("Reset && create states");
             remove_handles(&mut tpm, TpmHandleType::HmacOrLoadedSession)?;
             remove_handles(&mut tpm, TpmHandleType::Transient)?;
             let session = create_session(&mut tpm, &[0; 16])?;
-            State {
+            Ok(State {
                 session,
                 primary_handle: None,
-            }
-        }
-    };
+            })
+        },
+        Ok,
+    )?;
 
     println!("Key handle: {:08x}", state.session.handle);
 
