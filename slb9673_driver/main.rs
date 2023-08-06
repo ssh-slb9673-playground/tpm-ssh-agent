@@ -47,21 +47,6 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-fn remove_handles<T: I2CTpmAccessor>(tpm: &mut Tpm<T>, ht: TpmHandleType) -> Result<()> {
-    use tpm_i2c::tpm::structure::*;
-    if let TpmuCapabilities::Handles(x) = &tpm
-        .get_capability(TpmCapabilities::Handles, (ht as u32) << 24, 5)?
-        .1
-        .data
-    {
-        for handle in &x.handle {
-            println!("[+] Flush 0x{:08x}", handle);
-            let _ = &tpm.flush_context(*handle);
-        }
-    }
-    Ok(())
-}
-
 fn get_rsa_public_template(bits: u16, symmetric: TpmtSymdefObject) -> TpmuPublicParams {
     TpmuPublicParams::RsaDetail(TpmsRsaParams {
         symmetric,
@@ -147,34 +132,10 @@ fn create_session<T: tpm_i2c::tpm::I2CTpmAccessor>(
     )
 }
 
-fn sign<T: tpm_i2c::tpm::I2CTpmAccessor>(
-    tpm: &mut Tpm<T>,
-    state: &mut State,
-    msg: &[u8],
-) -> Result<Vec<u8>> {
-    let digest = state.session.algorithm.digest(msg);
-    let sig = tpm.sign(
-        state.primary_handle.unwrap(),
-        &mut state.session,
-        "password".as_bytes().to_vec(),
-        &digest,
-        TpmtSignatureScheme {
-            scheme: TpmiAlgorithmSigScheme::RsaPss,
-            details: TpmsSignatureScheme::AX(TpmsSchemeHash {
-                hash_algorithm: TpmiAlgorithmHash::Sha256,
-            }),
-        },
-        TpmtTicketHashCheck {
-            tag: TpmStructureTag::HashCheck,
-            hierarchy: TpmiHandleHierarchy::Owner,
-            digest: Tpm2BDigest::new(&[]),
-        },
-    )?;
-
-    Ok(match sig.details {
-        TpmuSignature::Rsa(x) => x.signature.buffer,
-        _ => todo!(),
-    })
+struct TpmSshAgent<'a, T: I2CTpmAccessor> {
+    pub state_file_path: &'a Path,
+    pub tpm: Tpm<'a, T>,
+    pub state: State,
 }
 
 fn next_nonce() -> [u8; 16] {
@@ -184,48 +145,104 @@ fn next_nonce() -> [u8; 16] {
     ret
 }
 
+fn remove_handles<T: I2CTpmAccessor>(tpm: &mut Tpm<T>, ht: TpmHandleType) -> Result<()> {
+    use tpm_i2c::tpm::structure::*;
+    if let TpmuCapabilities::Handles(x) = &tpm
+        .get_capability(TpmCapabilities::Handles, (ht as u32) << 24, 5)?
+        .1
+        .data
+    {
+        for handle in &x.handle {
+            println!("[+] Flush 0x{:08x}", handle);
+            let _ = &tpm.flush_context(*handle);
+        }
+    }
+    Ok(())
+}
+
+impl<'a, T: I2CTpmAccessor> TpmSshAgent<'a, T> {
+    pub fn new(state_file_path: &'a Path, device: &'a mut T) -> Result<TpmSshAgent<'a, T>> {
+        let mut tpm = Tpm::new(device)?;
+        tpm.init(false)?;
+        let state = State::load(state_file_path)?.map_or_else(
+            || -> Result<State> {
+                println!("Reset && create states");
+                remove_handles(&mut tpm, TpmHandleType::HmacOrLoadedSession)?;
+                remove_handles(&mut tpm, TpmHandleType::Transient)?;
+                let session = create_session(&mut tpm, &next_nonce())?;
+                Ok(State {
+                    session,
+                    primary_handle: None,
+                })
+            },
+            Ok,
+        )?;
+
+        tpm.print_info()?;
+
+        Ok(TpmSshAgent {
+            state_file_path,
+            tpm,
+            state,
+        })
+    }
+
+    pub fn sign(&mut self, msg: &[u8]) -> Result<Vec<u8>> {
+        let digest = self.state.session.algorithm.digest(msg);
+        let sig = self.tpm.sign(
+            self.state.primary_handle.unwrap(),
+            &mut self.state.session,
+            "password".as_bytes().to_vec(),
+            &digest,
+            TpmtSignatureScheme {
+                scheme: TpmiAlgorithmSigScheme::RsaPss,
+                details: TpmsSignatureScheme::AX(TpmsSchemeHash {
+                    hash_algorithm: TpmiAlgorithmHash::Sha256,
+                }),
+            },
+            TpmtTicketHashCheck {
+                tag: TpmStructureTag::HashCheck,
+                hierarchy: TpmiHandleHierarchy::Owner,
+                digest: Tpm2BDigest::new(&[]),
+            },
+        )?;
+
+        Ok(match sig.details {
+            TpmuSignature::Rsa(x) => x.signature.buffer,
+            _ => todo!(),
+        })
+    }
+
+    pub fn close(&mut self) -> Result<()> {
+        self.state.save(self.state_file_path)?;
+        self.tpm.shutdown(false)?;
+        Ok(())
+    }
+}
+
 #[allow(unused_must_use)]
 fn main() -> Result<()> {
     let state_file_path = Path::new("state.json");
-
     let mut device = driver::hidapi::MCP2221A::new(0x2e)?;
-    let mut tpm = Tpm::new(&mut device)?;
-    tpm.init(false)?;
+    let mut agent = TpmSshAgent::new(state_file_path, &mut device)?;
 
-    tpm.print_info()?;
+    println!("session handle: {:08x}", agent.state.session.handle);
 
-    tpm.test_params(TpmtPublicParams {
-        algorithm_type: TpmiAlgorithmPublic::Rsa,
-        parameters: get_rsa_public_template(2048, get_null_symdefobj()),
-    })?;
-
-    let mut state: State = State::load(state_file_path)?.map_or_else(
-        || -> Result<State> {
-            println!("Reset && create states");
-            remove_handles(&mut tpm, TpmHandleType::HmacOrLoadedSession)?;
-            remove_handles(&mut tpm, TpmHandleType::Transient)?;
-            let session = create_session(&mut tpm, &next_nonce())?;
-            Ok(State {
-                session,
-                primary_handle: None,
-            })
-        },
-        Ok,
-    )?;
-
-    println!("session handle: {:08x}", state.session.handle);
-
-    if state.primary_handle.is_none() {
-        state.session.set_nonce(next_nonce().to_vec());
-        let res = create_primary_key(&mut tpm, &mut state.session, "password".as_bytes())?;
-        state.primary_handle = Some(res.handle);
+    if agent.state.primary_handle.is_none() {
+        agent.state.session.set_nonce(next_nonce().to_vec());
+        let res = create_primary_key(
+            &mut agent.tpm,
+            &mut agent.state.session,
+            "password".as_bytes(),
+        )?;
+        agent.state.primary_handle = Some(res.handle);
     }
-    println!("state: {:?}", &state);
+    println!("state: {:?}", &agent.state);
 
-    state.session.set_nonce(next_nonce().to_vec());
+    agent.state.session.set_nonce(next_nonce().to_vec());
     // let signature = sign(&mut tpm, &mut state, "hello world".as_bytes())?;
 
-    let public_data = tpm.read_public(state.primary_handle.unwrap())?;
+    let public_data = agent.tpm.read_public(agent.state.primary_handle.unwrap())?;
     if let Some(x) = public_data.0.public_area {
         if let TpmuPublicIdentifier::Rsa(y) = x.unique {
             let pubkey = PublicKey::new(
@@ -239,9 +256,7 @@ fn main() -> Result<()> {
         }
     }
 
-    state.save(state_file_path)?;
-
-    tpm.shutdown(false)?;
+    agent.close()?;
 
     Ok(())
 }
