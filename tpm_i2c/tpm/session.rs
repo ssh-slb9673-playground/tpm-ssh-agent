@@ -1,12 +1,12 @@
-use crate::tpm::structure::{
-    Tpm2Command, TpmAttrSession, TpmAuthCommand, TpmHandle, TpmPermanentHandle, TpmiAlgorithmHash,
-    TpmiDhEntity, TpmiDhObject,
-};
-
 use crate::tpm::crypto::kdf_a;
+use crate::tpm::structure::{
+    Tpm2Command, TpmAttrSession, TpmAuthCommand, TpmHandle, TpmiAlgorithmHash, TpmiDhEntity,
+    TpmiDhObject,
+};
 use crate::tpm::ToTpm;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TpmSession {
     pub algorithm: TpmiAlgorithmHash,
     pub handle: TpmHandle,
@@ -17,7 +17,7 @@ pub struct TpmSession {
     pub tpm_key: TpmiDhObject,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TpmSessionNonce {
     current_nonce: Vec<u8>,
     prev_nonce: Vec<u8>,

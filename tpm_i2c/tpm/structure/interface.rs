@@ -6,6 +6,7 @@ use crate::tpm::{FromTpm, ToTpm, TpmError};
 use crate::TpmResult;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::cast::FromPrimitive;
+use serde::{Deserialize, Serialize};
 
 #[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -14,14 +15,14 @@ pub enum TpmiYesNo {
     Yes = 1,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 pub enum TpmiDhObject {
     Transient(TpmHandle),
     Persistent(TpmHandle),
     Null,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 pub enum TpmiDhEntity {
     Transient(TpmHandle),
     Persistent(TpmHandle),

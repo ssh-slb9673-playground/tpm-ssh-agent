@@ -1,12 +1,47 @@
 mod driver;
+mod saved_state;
+use saved_state::State;
+use std::path::Path;
 use tpm_i2c::tpm::session::TpmSession;
 use tpm_i2c::tpm::structure::*;
-use tpm_i2c::tpm::Tpm;
+use tpm_i2c::tpm::{I2CTpmAccessor, Tpm};
 
-fn remove_handles(
-    tpm: &mut Tpm<driver::hidapi::MCP2221A>,
-    ht: tpm_i2c::tpm::structure::TpmHandleType,
-) -> tpm_i2c::TpmResult<()> {
+type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub enum Error {
+    IoError(std::io::Error),
+    TpmError(tpm_i2c::Error),
+    JsonError(serde_json::Error),
+}
+
+macro_rules! error_wrapping_arm {
+    ($et:ty, $arm:ident) => {
+        impl std::convert::From<$et> for Error {
+            fn from(err: $et) -> Self {
+                Error::$arm(err)
+            }
+        }
+    };
+}
+
+error_wrapping_arm!(std::io::Error, IoError);
+error_wrapping_arm!(tpm_i2c::Error, TpmError);
+error_wrapping_arm!(serde_json::Error, JsonError);
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match &self {
+            Error::IoError(e) => write!(f, "{}", e),
+            Error::TpmError(e) => write!(f, "{}", e),
+            Error::JsonError(e) => write!(f, "{}", e),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+fn remove_handles<T: I2CTpmAccessor>(tpm: &mut Tpm<T>, ht: TpmHandleType) -> Result<()> {
     use tpm_i2c::tpm::structure::*;
     if let TpmuCapabilities::Handles(x) = &tpm
         .get_capability(TpmCapabilities::Handles, (ht as u32) << 24, 5)?
@@ -49,14 +84,14 @@ fn get_null_symdefobj() -> TpmtSymdefObject {
     }
 }
 
-fn create_primary_key<T: tpm_i2c::tpm::I2CTpmAccessor>(
+fn create_primary_key<T: I2CTpmAccessor>(
     tpm: &mut Tpm<T>,
-    session: TpmSession,
+    session: &mut TpmSession,
     auth_value: &[u8],
-) -> tpm_i2c::TpmResult<tpm_i2c::tpm::commands::Tpm2CreatePrimaryResponse> {
+) -> Result<tpm_i2c::tpm::commands::Tpm2CreatePrimaryResponse> {
     tpm.create_primary(
         TpmPermanentHandle::Platform.into(),
-        session.clone(),
+        session,
         Tpm2BSensitiveCreate {
             sensitive: TpmsSensitiveCreate {
                 user_auth: Tpm2BAuth::new(auth_value),
@@ -82,24 +117,17 @@ fn create_primary_key<T: tpm_i2c::tpm::I2CTpmAccessor>(
             pcr_selections: vec![],
         },
     )
+    .map_err(|err| err.into())
 }
 
-#[allow(unused_must_use)]
-fn main() -> tpm_i2c::TpmResult<()> {
-    let mut device = driver::hidapi::MCP2221A::new(0x2e)?;
-    let mut tpm = Tpm::new(&mut device)?;
-    tpm.init(true)?;
-
-    remove_handles(&mut tpm, TpmHandleType::HmacOrLoadedSession)?;
-    remove_handles(&mut tpm, TpmHandleType::Transient)?;
-
-    tpm.print_info()?;
-
-    let caller_nonce_first = tpm.get_random(16)?;
-    let mut session = tpm.start_auth_session(
+fn create_session<T: tpm_i2c::tpm::I2CTpmAccessor>(
+    tpm: &mut Tpm<T>,
+    first_nonce: &[u8],
+) -> Result<TpmSession> {
+    tpm.start_auth_session(
         TpmiDhObject::Null,
         TpmiDhEntity::Null,
-        Tpm2BNonce::new(&caller_nonce_first),
+        Tpm2BNonce::new(first_nonce),
         Tpm2BEncryptedSecret::new(&[]),
         TpmSessionType::Hmac,
         TpmtSymdef {
@@ -108,38 +136,46 @@ fn main() -> tpm_i2c::TpmResult<()> {
             mode: TpmuSymMode::Null,
         },
         TpmiAlgorithmHash::Sha256,
-    )?;
+    )
+    .map_err(|err| err.into())
+}
 
-    session.set_caller_nonce([0u8; 16].to_vec());
+#[allow(unused_must_use)]
+fn main() -> Result<()> {
+    let state_file_path = Path::new("state.json");
 
-    println!("Session handle: {:08x}", &session.handle);
+    let mut device = driver::hidapi::MCP2221A::new(0x2e)?;
+    let mut tpm = Tpm::new(&mut device)?;
+    tpm.init(false)?;
 
-    let res = create_primary_key(&mut tpm, session.clone(), "password".as_bytes())?;
+    tpm.print_info()?;
 
-    println!("Key handle: {:08x}", res.handle);
-
-    let e = if let TpmuPublicParams::RsaDetail(params) =
-        &res.out_public.public_area.as_ref().unwrap().parameters
-    {
-        params.exponent
-    } else {
-        unreachable!()
+    let mut state = match State::load(state_file_path)? {
+        Some(x) => x,
+        None => {
+            println!("Reset && create states");
+            remove_handles(&mut tpm, TpmHandleType::HmacOrLoadedSession)?;
+            remove_handles(&mut tpm, TpmHandleType::Transient)?;
+            let session = create_session(&mut tpm, &[0; 16])?;
+            State {
+                session,
+                primary_handle: None,
+            }
+        }
     };
 
-    let n = if let TpmuPublicIdentifier::Rsa(data) =
-        &res.out_public.public_area.as_ref().unwrap().unique
-    {
-        &data.buffer
-    } else {
-        unreachable!();
-    };
+    println!("Key handle: {:08x}", state.session.handle);
 
-    println!("e = {:x?}", &e);
-    println!("n = {:x?}", &n);
+    if state.primary_handle.is_none() {
+        let res = create_primary_key(&mut tpm, &mut state.session, "password".as_bytes())?;
+        state.primary_handle = Some(res.handle);
+    }
 
-    tpm.flush_context(res.handle)?;
+    println!("state: {:?}", &state);
 
-    tpm.shutdown(true)?;
+    state.save(state_file_path)?;
+
+    tpm.shutdown(false)?;
 
     Ok(())
 }

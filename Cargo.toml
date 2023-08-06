@@ -29,6 +29,9 @@ hmac = "0.12.1"
 i2cdev = { version = "0.5.1", optional = true }
 num-derive = "0.4.0"
 num-traits = "0.2.16"
+rand = "0.8.5"
+serde = { version = "1.0.182", features = ["derive"] }
+serde_json = "1.0.104"
 sha1 = "0.10.5"
 sha2 = "0.10.7"
 sha3 = "0.10.8"

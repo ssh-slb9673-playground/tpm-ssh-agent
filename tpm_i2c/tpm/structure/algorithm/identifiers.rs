@@ -4,6 +4,7 @@ use crate::tpm::{FromTpm, ToTpm};
 use crate::TpmResult;
 use enum_iterator::Sequence;
 use num_derive::{FromPrimitive, ToPrimitive};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use subenum::subenum;
 
@@ -23,7 +24,19 @@ use subenum::subenum;
     TpmiAlgorithmAsymmetricScheme, // !ALG.am + !ALG.ax + !ALG.ae
     TpmiAlgorithmRsaScheme, // In specification: !ALG.ae + !ALG.ax but I used tpm2-tss's definition (RSA-related definition)
 )]
-#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq, Hash, Clone, Copy, Sequence)]
+#[derive(
+    FromPrimitive,
+    ToPrimitive,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Clone,
+    Copy,
+    Sequence,
+    Serialize,
+    Deserialize,
+)]
 #[repr(u16)]
 pub enum TpmAlgorithmIdentifier {
     Error = 0x0000,

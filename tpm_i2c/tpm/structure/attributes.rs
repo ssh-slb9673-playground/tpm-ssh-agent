@@ -3,6 +3,7 @@ use crate::tpm::{FromTpm, ToTpm, TpmError};
 use crate::util::{p32be, u32be};
 use crate::TpmResult;
 use bitfield_struct::bitfield;
+use serde::{Deserialize, Serialize};
 
 #[bitfield(u8)]
 pub struct TpmAttrLocality {
@@ -16,6 +17,7 @@ pub struct TpmAttrLocality {
 }
 
 #[bitfield(u8)]
+#[derive(Deserialize, Serialize)]
 pub struct TpmAttrSession {
     pub continue_session: bool,
     pub audit_exclusive: bool,
