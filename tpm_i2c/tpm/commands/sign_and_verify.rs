@@ -21,6 +21,7 @@ impl Tpm {
     ) -> TpmResult<TpmtSignature> {
         let (public_buf, _, _) = self.read_public(key_handle)?;
 
+        auth_area.refresh_nonce();
         let mut cmd = Tpm2Command::new_with_session(
             TpmStructureTag::Sessions,
             Tpm2CommandCode::Sign,
@@ -37,7 +38,7 @@ impl Tpm {
         let res = self.execute_with_session(&cmd, 0)?;
 
         if !res.auth_area.is_empty() {
-            auth_area.set_nonce(res.auth_area[0].nonce.buffer.clone());
+            auth_area.set_tpm_nonce(res.auth_area[0].nonce.buffer.clone());
             assert!(auth_area.validate(&res, auth_value.clone(), &res.auth_area[0].hmac.buffer));
         }
 

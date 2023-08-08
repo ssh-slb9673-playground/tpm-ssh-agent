@@ -21,6 +21,7 @@ impl Tpm {
         outside_info: Tpm2BData,
         creation_pcr: TpmlPcrSelection,
     ) -> TpmResult<Tpm2CreatePrimaryResponse> {
+        auth_area.refresh_nonce();
         let res = self.execute_with_session(
             &Tpm2Command::new_with_session(
                 TpmStructureTag::Sessions,
@@ -39,7 +40,7 @@ impl Tpm {
         )?;
 
         if !res.auth_area.is_empty() {
-            auth_area.set_nonce(res.auth_area[0].nonce.buffer.clone());
+            auth_area.set_tpm_nonce(res.auth_area[0].nonce.buffer.clone());
             assert!(auth_area.validate(&res, auth_value.clone(), &res.auth_area[0].hmac.buffer));
         }
 
