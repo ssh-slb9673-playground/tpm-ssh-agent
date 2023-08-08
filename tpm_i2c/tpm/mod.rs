@@ -76,16 +76,13 @@ pub trait I2CTpmAccessor {
     fn i2c_write(&mut self, write_buf: &[u8]) -> TpmResult<()>;
 }
 
-pub struct Tpm<'a, T: I2CTpmAccessor> {
-    device: &'a mut T,
+pub struct Tpm {
+    device: Box<dyn I2CTpmAccessor>,
     current_locality: u8,
 }
 
-impl<'a, T: I2CTpmAccessor> Tpm<'a, T> {
-    pub fn new(device: &'a mut T) -> TpmResult<Tpm<'a, T>>
-    where
-        T: I2CTpmAccessor,
-    {
+impl Tpm {
+    pub fn new(mut device: Box<dyn I2CTpmAccessor>) -> TpmResult<Tpm> {
         let mut read_buf = [0u8; 1];
         device.initialize()?;
         device.i2c_write(&[0x00])?;

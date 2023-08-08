@@ -5,10 +5,10 @@ use crate::tpm::structure::{
     Tpm2Command, Tpm2CommandCode, Tpm2Response, TpmCapabilities, TpmResponseCode, TpmStructureTag,
     TpmiYesNo, TpmsCapabilityData, TpmtPublicParams,
 };
-use crate::tpm::{FromTpm, I2CTpmAccessor, Tpm, TpmError};
+use crate::tpm::{FromTpm, Tpm, TpmError};
 use crate::TpmResult;
 
-impl<T: I2CTpmAccessor> Tpm<'_, T> {
+impl Tpm {
     pub fn get_capability(
         &mut self,
         capability: TpmCapabilities,

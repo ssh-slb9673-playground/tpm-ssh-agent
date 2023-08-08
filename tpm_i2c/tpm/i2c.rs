@@ -1,4 +1,4 @@
-use crate::tpm::{I2CTpmAccessor, Tpm};
+use crate::tpm::Tpm;
 use crate::util::{p32le, u16le, u32le};
 use crate::TpmResult;
 use bitfield_struct::bitfield;
@@ -60,7 +60,7 @@ pub struct TpmInterfaceCaps {
     _reserved: bool,
 }
 
-impl<T: I2CTpmAccessor> Tpm<'_, T> {
+impl Tpm {
     pub(in crate::tpm) fn read_identifiers(&mut self) -> TpmResult<(u16, u16, u8)> {
         let mut read_vid_and_did_buf = [0u8; 4];
         let mut read_rid_buf = [0u8; 1];

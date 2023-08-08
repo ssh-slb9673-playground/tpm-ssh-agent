@@ -4,10 +4,10 @@
 use crate::tpm::structure::{
     Tpm2Command, Tpm2CommandCode, TpmHandle, TpmResponseCode, TpmStructureTag,
 };
-use crate::tpm::{I2CTpmAccessor, Tpm, TpmError};
+use crate::tpm::{Tpm, TpmError};
 use crate::TpmResult;
 
-impl<T: I2CTpmAccessor> Tpm<'_, T> {
+impl Tpm {
     pub fn flush_context(&mut self, flush_handle: TpmHandle) -> TpmResult<()> {
         let cmd = Tpm2Command::new(
             TpmStructureTag::NoSessions,

@@ -4,7 +4,7 @@ use rand::prelude::*;
 use ssh_key::public::{KeyData, RsaPublicKey};
 use ssh_key::{MPInt, PublicKey};
 use state::State;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tpm_i2c::tpm::session::TpmSession;
 use tpm_i2c::tpm::structure::*;
 use tpm_i2c::tpm::{I2CTpmAccessor, Tpm};
@@ -69,8 +69,8 @@ fn get_null_symdefobj() -> TpmtSymdefObject {
     }
 }
 
-fn create_primary_key<T: I2CTpmAccessor>(
-    tpm: &mut Tpm<T>,
+fn create_primary_key(
+    tpm: &mut Tpm,
     session: &mut TpmSession,
     auth_value: &[u8],
 ) -> Result<tpm_i2c::tpm::commands::Tpm2CreatePrimaryResponse> {
@@ -105,10 +105,7 @@ fn create_primary_key<T: I2CTpmAccessor>(
     .map_err(|err| err.into())
 }
 
-fn create_session<T: tpm_i2c::tpm::I2CTpmAccessor>(
-    tpm: &mut Tpm<T>,
-    first_nonce: &[u8],
-) -> Result<TpmSession> {
+fn create_session(tpm: &mut Tpm, first_nonce: &[u8]) -> Result<TpmSession> {
     tpm.start_auth_session(
         TpmiDhObject::Null,
         TpmiDhEntity::Null,
@@ -132,9 +129,9 @@ fn create_session<T: tpm_i2c::tpm::I2CTpmAccessor>(
     )
 }
 
-struct TpmSshAgent<'a, T: I2CTpmAccessor> {
-    pub state_file_path: &'a Path,
-    pub tpm: Tpm<'a, T>,
+struct TpmSshAgent {
+    pub state_file_path: PathBuf,
+    pub tpm: Tpm,
     pub state: State,
 }
 
@@ -145,7 +142,7 @@ fn next_nonce() -> [u8; 16] {
     ret
 }
 
-fn remove_handles<T: I2CTpmAccessor>(tpm: &mut Tpm<T>, ht: TpmHandleType) -> Result<()> {
+fn remove_handles(tpm: &mut Tpm, ht: TpmHandleType) -> Result<()> {
     use tpm_i2c::tpm::structure::*;
     if let TpmuCapabilities::Handles(x) = &tpm
         .get_capability(TpmCapabilities::Handles, (ht as u32) << 24, 5)?
@@ -160,11 +157,17 @@ fn remove_handles<T: I2CTpmAccessor>(tpm: &mut Tpm<T>, ht: TpmHandleType) -> Res
     Ok(())
 }
 
-impl<'a, T: I2CTpmAccessor> TpmSshAgent<'a, T> {
-    pub fn new(state_file_path: &'a Path, device: &'a mut T) -> Result<TpmSshAgent<'a, T>> {
+impl TpmSshAgent {
+    pub fn new(state_file_path: PathBuf, device: Box<dyn I2CTpmAccessor>) -> Result<TpmSshAgent> {
         let mut tpm = Tpm::new(device)?;
-        tpm.init(false)?;
-        let state = State::load(state_file_path)?.map_or_else(
+        if let Err(tpm_i2c::Error::TpmError(tpm_i2c::tpm::TpmError::UnsuccessfulResponse(
+            TpmResponseCode::ErrorForParam((_, TpmResponseCodeFormat1::Value)),
+        ))) = tpm.init(false)
+        {
+            println!("[*] Startup without all data");
+            tpm.init(true)?;
+        }
+        let state = State::load(&state_file_path)?.map_or_else(
             || -> Result<State> {
                 println!("Reset && create states");
                 remove_handles(&mut tpm, TpmHandleType::HmacOrLoadedSession)?;
@@ -214,7 +217,7 @@ impl<'a, T: I2CTpmAccessor> TpmSshAgent<'a, T> {
     }
 
     pub fn close(&mut self) -> Result<()> {
-        self.state.save(self.state_file_path)?;
+        self.state.save(&self.state_file_path)?;
         self.tpm.shutdown(false)?;
         Ok(())
     }
@@ -222,9 +225,12 @@ impl<'a, T: I2CTpmAccessor> TpmSshAgent<'a, T> {
 
 #[allow(unused_must_use)]
 fn main() -> Result<()> {
-    let state_file_path = Path::new("state.json");
-    let mut device = driver::hidapi::MCP2221A::new(0x2e)?;
-    let mut agent = TpmSshAgent::new(state_file_path, &mut device)?;
+    let state_file_path = Path::new("state.json").to_path_buf();
+
+    let mut agent = TpmSshAgent::new(
+        state_file_path,
+        Box::new(driver::hidapi::MCP2221A::new(0x2e)?),
+    )?;
 
     println!("session handle: {:08x}", agent.state.session.handle);
 
@@ -240,7 +246,9 @@ fn main() -> Result<()> {
     println!("state: {:?}", &agent.state);
 
     agent.state.session.set_nonce(next_nonce().to_vec());
-    // let signature = sign(&mut tpm, &mut state, "hello world".as_bytes())?;
+    let signature = agent.sign("hello world".as_bytes())?;
+
+    dbg!(&signature);
 
     let public_data = agent.tpm.read_public(agent.state.primary_handle.unwrap())?;
     if let Some(x) = public_data.0.public_area {

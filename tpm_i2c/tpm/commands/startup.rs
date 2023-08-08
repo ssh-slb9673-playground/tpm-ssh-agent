@@ -4,10 +4,10 @@
 use crate::tpm::structure::{
     Tpm2Command, Tpm2CommandCode, TpmResponseCode, TpmStartupType, TpmStructureTag,
 };
-use crate::tpm::{I2CTpmAccessor, Tpm, TpmError};
+use crate::tpm::{Tpm, TpmError};
 use crate::TpmResult;
 
-impl<T: I2CTpmAccessor> Tpm<'_, T> {
+impl Tpm {
     pub fn startup(&mut self, clear_state: bool) -> TpmResult<()> {
         let res = self.execute(&Tpm2Command::new(
             TpmStructureTag::NoSessions,

@@ -5,10 +5,10 @@ use crate::tpm::structure::{
     Tpm2BName, Tpm2BPublic, Tpm2Command, Tpm2CommandCode, TpmHandle, TpmResponseCode,
     TpmStructureTag,
 };
-use crate::tpm::{FromTpm, I2CTpmAccessor, Tpm, TpmError};
+use crate::tpm::{FromTpm, Tpm, TpmError};
 use crate::TpmResult;
 
-impl<T: I2CTpmAccessor> Tpm<'_, T> {
+impl Tpm {
     pub fn read_public(
         &mut self,
         object_handle: TpmHandle,

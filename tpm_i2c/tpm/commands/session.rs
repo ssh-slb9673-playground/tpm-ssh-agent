@@ -7,10 +7,10 @@ use crate::tpm::structure::{
     TpmResponseCode, TpmSessionType, TpmStructureTag, TpmiAlgorithmHash, TpmiDhEntity,
     TpmiDhObject, TpmtSymdef,
 };
-use crate::tpm::{FromTpm, I2CTpmAccessor, Tpm, TpmError};
+use crate::tpm::{FromTpm, Tpm, TpmError};
 use crate::TpmResult;
 
-impl<T: I2CTpmAccessor> Tpm<'_, T> {
+impl Tpm {
     pub fn start_auth_session(
         &mut self,
         tpm_key: TpmiDhObject,
