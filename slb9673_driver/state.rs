@@ -8,7 +8,7 @@ use tpm_i2c::tpm::structure::TpmHandle;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct State {
-    pub session: TpmSession,
+    pub session: Option<TpmSession>,
     pub primary_handle: Option<TpmHandle>,
 }
 
@@ -24,7 +24,7 @@ impl State {
 
     pub fn save(&self, file: &Path) -> Result<()> {
         Ok(serde_json::to_writer(
-            &mut File::create(&file).map(BufWriter::new)?,
+            &mut File::create(file).map(BufWriter::new)?,
             self,
         )?)
     }

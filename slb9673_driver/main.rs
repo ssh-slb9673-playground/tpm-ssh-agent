@@ -1,7 +1,8 @@
 mod driver;
 mod state;
 use rand::prelude::*;
-use ssh_agent_lib::proto::{message, Message};
+use ssh_agent_lib::proto::message::{Identity, Message};
+use ssh_agent_lib::proto::{SignRequest, Signature};
 use ssh_agent_lib::Agent;
 use ssh_key::public::{KeyData, RsaPublicKey};
 use ssh_key::{MPInt, PublicKey};
@@ -62,7 +63,7 @@ fn get_rsa_public_template(bits: u16, symmetric: TpmtSymdefObject) -> TpmuPublic
     TpmuPublicParams::RsaDetail(TpmsRsaParams {
         symmetric,
         scheme: TpmtRsaScheme {
-            scheme: TpmiAlgorithmRsaScheme::RsaPss,
+            scheme: TpmiAlgorithmRsaScheme::RsaSsa,
             details: TpmuAsymmetricScheme::Signature(TpmsSignatureScheme::AX(TpmsSchemeHash {
                 hash_algorithm: TpmiAlgorithmHash::Sha256,
             })),
@@ -179,14 +180,13 @@ impl TpmSshWrapper {
             println!("[*] Startup without all data");
             tpm.init(true)?;
         }
+
         let state = State::load(&state_file_path)?.map_or_else(
             || -> Result<State> {
-                println!("Reset && create states");
                 remove_handles(&mut tpm, TpmHandleType::HmacOrLoadedSession)?;
                 remove_handles(&mut tpm, TpmHandleType::Transient)?;
-                let session = create_session(&mut tpm, &next_nonce())?;
                 Ok(State {
-                    session,
+                    session: None,
                     primary_handle: None,
                 })
             },
@@ -203,15 +203,21 @@ impl TpmSshWrapper {
         })
     }
 
+    pub fn open_session(&mut self) -> Result<()> {
+        remove_handles(&mut self.tpm, TpmHandleType::HmacOrLoadedSession)?;
+        self.state.session = Some(create_session(&mut self.tpm, &next_nonce())?);
+        Ok(())
+    }
+
     pub fn sign_raw(&mut self, msg: &[u8]) -> Result<Vec<u8>> {
-        let digest = self.state.session.algorithm.digest(msg);
+        let digest = TpmiAlgorithmHash::Sha256.digest(msg);
         let sig = self.tpm.sign(
             self.state.primary_handle.unwrap(),
-            &mut self.state.session,
+            self.state.session.as_mut().unwrap(),
             "password".as_bytes().to_vec(),
             &digest,
             TpmtSignatureScheme {
-                scheme: TpmiAlgorithmSigScheme::RsaPss,
+                scheme: TpmiAlgorithmSigScheme::RsaSsa,
                 details: TpmsSignatureScheme::AX(TpmsSchemeHash {
                     hash_algorithm: TpmiAlgorithmHash::Sha256,
                 }),
@@ -235,69 +241,110 @@ impl TpmSshWrapper {
         Ok(())
     }
 
+    pub fn sign(
+        &mut self,
+        request: &SignRequest,
+    ) -> std::result::Result<Option<Signature>, Box<dyn std::error::Error>> {
+        /*
+        if request.flags & signature::RSA_SHA2_256 != 0 {
+            algorithm = "rsa-sha2-256";
+            digest = TpmiAlgorithmHash::Sha256;
+        } else {
+            algorithm = "ssh-rsa";
+            digest = TpmiAlgorithmHash::Sha1;
+        }*/
+        /*if request.flags & ssh_agent_lib::proto::signature::RSA_SHA2_256 == 0 {
+            println!("Error");
+            return Ok(None);
+        }*/
+
+        let algorithm = "rsa-sha2-256";
+
+        self.state
+            .session
+            .as_mut()
+            .unwrap()
+            .set_nonce(next_nonce().to_vec());
+        let res = self.sign_raw(&request.data)?;
+
+        Ok(Some(Signature {
+            algorithm: algorithm.to_string(),
+            blob: [res].concat(),
+        }))
+    }
+
     fn handle_message(
-        &self,
+        &mut self,
         request: Message,
     ) -> std::result::Result<Message, Box<dyn std::error::Error>> {
         use ssh_agent_lib::proto::to_bytes;
 
-        dbg!("Request: {:?}", &request);
-        let response = match request {
+        match request {
             Message::RequestIdentities => {
                 let mut identities = vec![];
                 for identity in self.identities.read().unwrap().iter() {
-                    identities.push(message::Identity {
+                    identities.push(Identity {
                         pubkey_blob: to_bytes(&identity)?,
-                        comment: "".to_string(),
+                        comment: "tpm_key".to_string(),
                     });
                 }
                 Ok(Message::IdentitiesAnswer(identities))
             }
-            /*Message::SignRequest(request) => {
-                let signature = to_bytes(&self.sign(&request)?)?;
-                Ok(Message::SignResponse(signature))
-            }*/
+            Message::SignRequest(request) => {
+                if let Some(sig) = self.sign(&request)? {
+                    let signature = to_bytes(&sig)?;
+                    Ok(Message::SignResponse(signature))
+                } else {
+                    Ok(Message::Failure)
+                }
+            }
             _ => Err(format!("Unknown message: {:?}", request).into()),
-        };
-        dbg!("Response {:?}", &response);
-        response
+        }
     }
 
     pub fn setup(&mut self) -> Result<()> {
+        self.open_session()?;
         if self.state.primary_handle.is_none() {
-            self.state.session.set_nonce(next_nonce().to_vec());
+            self.state
+                .session
+                .as_mut()
+                .unwrap()
+                .set_nonce(next_nonce().to_vec());
             let res = create_primary_key(
                 &mut self.tpm,
-                &mut self.state.session,
+                self.state.session.as_mut().unwrap(),
                 "password".as_bytes(),
             )?;
             self.state.primary_handle = Some(res.handle);
         }
         println!("state: {:?}", &self.state);
 
+        /*
         self.state.session.set_nonce(next_nonce().to_vec());
-        // let signature = agent.sign("hello world".as_bytes())?;
+        let signature = self.sign_raw("hello world".as_bytes())?;
+        */
 
         let public_data = self.tpm.read_public(self.state.primary_handle.unwrap())?;
         if let Some(x) = public_data.0.public_area {
             if let TpmuPublicIdentifier::Rsa(y) = x.unique {
+                let pubkey_modulus = [vec![0], y.buffer].concat();
                 let pubkey = PublicKey::new(
                     KeyData::Rsa(RsaPublicKey {
-                        e: MPInt::from_bytes(&[0x1, 0x00, 0x01])?,
-                        n: MPInt::from_bytes(&y.buffer)?,
+                        e: MPInt::from_bytes(&[0x01, 0x00, 0x01])?,
+                        n: MPInt::from_bytes(&pubkey_modulus)?,
                     }),
-                    "",
+                    "tpm_key",
                 );
                 self.identities
                     .write()
                     .unwrap()
                     .push(ssh_agent_lib::proto::PublicKey::Rsa(
                         ssh_agent_lib::proto::RsaPublicKey {
-                            e: [0x1, 0x00, 0x01].into(),
-                            n: y.buffer,
+                            e: vec![0x01, 0x00, 0x01],
+                            n: pubkey_modulus,
                         },
                     ));
-                println!("[+] Public key: {}", pubkey.to_openssh()?);
+                println!("[+] Public key: {:?}", pubkey.to_openssh()?);
             }
         }
 
@@ -313,7 +360,7 @@ impl Agent for TpmSshAgent {
     type Error = ();
 
     fn handle(&self, message: Message) -> std::result::Result<Message, ()> {
-        let wrapper = self.wrapper.lock().unwrap();
+        let mut wrapper = self.wrapper.lock().unwrap();
         wrapper.handle_message(message).or_else(|error| {
             println!("Error handling message - {:?}", error);
             Ok(Message::Failure)
@@ -346,7 +393,14 @@ fn main() -> Result<()> {
 
     println!(
         "session handle: {:08x}",
-        wrapper.lock().unwrap().state.session.handle
+        wrapper
+            .lock()
+            .unwrap()
+            .state
+            .session
+            .as_ref()
+            .unwrap()
+            .handle
     );
 
     let socket = "connect.sock";

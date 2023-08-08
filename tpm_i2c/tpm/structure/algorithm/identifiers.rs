@@ -311,9 +311,9 @@ impl TpmiAlgorithmHash {
             Self::Sha256 => arm!(sha2::Sha256),
             Self::Sha384 => arm!(sha2::Sha384),
             Self::Sha512 => arm!(sha2::Sha512),
-            Self::Sha3_256 => arm!(sha2::Sha256),
-            Self::Sha3_384 => arm!(sha2::Sha384),
-            Self::Sha3_512 => arm!(sha2::Sha512),
+            Self::Sha3_256 => arm!(sha3::Sha3_256),
+            Self::Sha3_384 => arm!(sha3::Sha3_384),
+            Self::Sha3_512 => arm!(sha3::Sha3_512),
             Self::Sm3_256 => arm!(sm3::Sm3),
             _ => {
                 unreachable!();
