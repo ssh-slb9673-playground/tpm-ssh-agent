@@ -70,7 +70,7 @@ pub trait FromTpmWithSelector<T>: std::fmt::Debug {
         Self: Sized;
 }
 
-pub trait I2CTpmAccessor {
+pub trait I2CTpmAccessor: Sync + Send {
     fn initialize(&mut self) -> TpmResult<()>;
     fn i2c_read(&mut self, read_buf: &mut [u8]) -> TpmResult<()>;
     fn i2c_write(&mut self, write_buf: &[u8]) -> TpmResult<()>;

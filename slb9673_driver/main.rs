@@ -1,10 +1,13 @@
 mod driver;
 mod state;
 use rand::prelude::*;
+use ssh_agent_lib::proto::{message, Message};
+use ssh_agent_lib::Agent;
 use ssh_key::public::{KeyData, RsaPublicKey};
 use ssh_key::{MPInt, PublicKey};
 use state::State;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, RwLock};
 use tpm_i2c::tpm::session::TpmSession;
 use tpm_i2c::tpm::structure::*;
 use tpm_i2c::tpm::{I2CTpmAccessor, Tpm};
@@ -17,6 +20,7 @@ pub enum Error {
     TpmError(tpm_i2c::Error),
     JsonError(serde_json::Error),
     SshKeyError(ssh_key::Error),
+    AgentError,
 }
 
 macro_rules! error_wrapping_arm {
@@ -34,6 +38,12 @@ error_wrapping_arm!(tpm_i2c::Error, TpmError);
 error_wrapping_arm!(serde_json::Error, JsonError);
 error_wrapping_arm!(ssh_key::Error, SshKeyError);
 
+impl From<()> for Error {
+    fn from(_: ()) -> Self {
+        Error::AgentError
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match &self {
@@ -41,6 +51,7 @@ impl std::fmt::Display for Error {
             Error::TpmError(e) => write!(f, "{}", e),
             Error::JsonError(e) => write!(f, "{}", e),
             Error::SshKeyError(e) => write!(f, "{}", e),
+            Error::AgentError => write!(f, "AgentError"),
         }
     }
 }
@@ -129,10 +140,11 @@ fn create_session(tpm: &mut Tpm, first_nonce: &[u8]) -> Result<TpmSession> {
     )
 }
 
-struct TpmSshAgent {
+pub struct TpmSshWrapper {
     pub state_file_path: PathBuf,
     pub tpm: Tpm,
     pub state: State,
+    pub identities: RwLock<Vec<ssh_agent_lib::proto::PublicKey>>,
 }
 
 fn next_nonce() -> [u8; 16] {
@@ -157,8 +169,8 @@ fn remove_handles(tpm: &mut Tpm, ht: TpmHandleType) -> Result<()> {
     Ok(())
 }
 
-impl TpmSshAgent {
-    pub fn new(state_file_path: PathBuf, device: Box<dyn I2CTpmAccessor>) -> Result<TpmSshAgent> {
+impl TpmSshWrapper {
+    pub fn new(state_file_path: PathBuf, device: Box<dyn I2CTpmAccessor>) -> Result<TpmSshWrapper> {
         let mut tpm = Tpm::new(device)?;
         if let Err(tpm_i2c::Error::TpmError(tpm_i2c::tpm::TpmError::UnsuccessfulResponse(
             TpmResponseCode::ErrorForParam((_, TpmResponseCodeFormat1::Value)),
@@ -183,14 +195,15 @@ impl TpmSshAgent {
 
         tpm.print_info()?;
 
-        Ok(TpmSshAgent {
+        Ok(TpmSshWrapper {
             state_file_path,
             tpm,
             state,
+            identities: RwLock::new(vec![]),
         })
     }
 
-    pub fn sign(&mut self, msg: &[u8]) -> Result<Vec<u8>> {
+    pub fn sign_raw(&mut self, msg: &[u8]) -> Result<Vec<u8>> {
         let digest = self.state.session.algorithm.digest(msg);
         let sig = self.tpm.sign(
             self.state.primary_handle.unwrap(),
@@ -221,50 +234,128 @@ impl TpmSshAgent {
         self.tpm.shutdown(false)?;
         Ok(())
     }
+
+    fn handle_message(
+        &self,
+        request: Message,
+    ) -> std::result::Result<Message, Box<dyn std::error::Error>> {
+        use ssh_agent_lib::proto::to_bytes;
+
+        dbg!("Request: {:?}", &request);
+        let response = match request {
+            Message::RequestIdentities => {
+                let mut identities = vec![];
+                for identity in self.identities.read().unwrap().iter() {
+                    identities.push(message::Identity {
+                        pubkey_blob: to_bytes(&identity)?,
+                        comment: "".to_string(),
+                    });
+                }
+                Ok(Message::IdentitiesAnswer(identities))
+            }
+            /*Message::SignRequest(request) => {
+                let signature = to_bytes(&self.sign(&request)?)?;
+                Ok(Message::SignResponse(signature))
+            }*/
+            _ => Err(format!("Unknown message: {:?}", request).into()),
+        };
+        dbg!("Response {:?}", &response);
+        response
+    }
+
+    pub fn setup(&mut self) -> Result<()> {
+        if self.state.primary_handle.is_none() {
+            self.state.session.set_nonce(next_nonce().to_vec());
+            let res = create_primary_key(
+                &mut self.tpm,
+                &mut self.state.session,
+                "password".as_bytes(),
+            )?;
+            self.state.primary_handle = Some(res.handle);
+        }
+        println!("state: {:?}", &self.state);
+
+        self.state.session.set_nonce(next_nonce().to_vec());
+        // let signature = agent.sign("hello world".as_bytes())?;
+
+        let public_data = self.tpm.read_public(self.state.primary_handle.unwrap())?;
+        if let Some(x) = public_data.0.public_area {
+            if let TpmuPublicIdentifier::Rsa(y) = x.unique {
+                let pubkey = PublicKey::new(
+                    KeyData::Rsa(RsaPublicKey {
+                        e: MPInt::from_bytes(&[0x1, 0x00, 0x01])?,
+                        n: MPInt::from_bytes(&y.buffer)?,
+                    }),
+                    "",
+                );
+                self.identities
+                    .write()
+                    .unwrap()
+                    .push(ssh_agent_lib::proto::PublicKey::Rsa(
+                        ssh_agent_lib::proto::RsaPublicKey {
+                            e: [0x1, 0x00, 0x01].into(),
+                            n: y.buffer,
+                        },
+                    ));
+                println!("[+] Public key: {}", pubkey.to_openssh()?);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+pub struct TpmSshAgent {
+    wrapper: Arc<Mutex<TpmSshWrapper>>,
+}
+
+impl Agent for TpmSshAgent {
+    type Error = ();
+
+    fn handle(&self, message: Message) -> std::result::Result<Message, ()> {
+        let wrapper = self.wrapper.lock().unwrap();
+        wrapper.handle_message(message).or_else(|error| {
+            println!("Error handling message - {:?}", error);
+            Ok(Message::Failure)
+        })
+    }
 }
 
 #[allow(unused_must_use)]
 fn main() -> Result<()> {
     let state_file_path = Path::new("state.json").to_path_buf();
 
-    let mut agent = TpmSshAgent::new(
+    let wrapper = Arc::new(Mutex::new(TpmSshWrapper::new(
         state_file_path,
         Box::new(driver::hidapi::MCP2221A::new(0x2e)?),
-    )?;
+    )?));
 
-    println!("session handle: {:08x}", agent.state.session.handle);
+    let agent = TpmSshAgent {
+        wrapper: wrapper.clone(),
+    };
 
-    if agent.state.primary_handle.is_none() {
-        agent.state.session.set_nonce(next_nonce().to_vec());
-        let res = create_primary_key(
-            &mut agent.tpm,
-            &mut agent.state.session,
-            "password".as_bytes(),
-        )?;
-        agent.state.primary_handle = Some(res.handle);
-    }
-    println!("state: {:?}", &agent.state);
+    let wrapper_for_handler = wrapper.clone();
+    ctrlc::set_handler(move || {
+        wrapper_for_handler.lock().unwrap().close();
+        println!("saved");
+        std::process::exit(0);
+    })
+    .expect("Error setting Ctrl-C handler");
 
-    agent.state.session.set_nonce(next_nonce().to_vec());
-    let signature = agent.sign("hello world".as_bytes())?;
+    wrapper.lock().unwrap().setup()?;
 
-    dbg!(&signature);
+    println!(
+        "session handle: {:08x}",
+        wrapper.lock().unwrap().state.session.handle
+    );
 
-    let public_data = agent.tpm.read_public(agent.state.primary_handle.unwrap())?;
-    if let Some(x) = public_data.0.public_area {
-        if let TpmuPublicIdentifier::Rsa(y) = x.unique {
-            let pubkey = PublicKey::new(
-                KeyData::Rsa(RsaPublicKey {
-                    e: MPInt::from_bytes(&[0x1, 0x00, 0x01])?,
-                    n: MPInt::from_bytes(&y.buffer)?,
-                }),
-                "",
-            );
-            println!("[+] Public key: {}", pubkey.to_openssh()?);
-        }
-    }
+    let socket = "connect.sock";
+    let _ = std::fs::remove_file(socket);
 
-    agent.close()?;
+    println!("Run agent at {}", socket);
+    agent.run_unix(socket);
+
+    wrapper.lock().unwrap().close()?;
 
     Ok(())
 }

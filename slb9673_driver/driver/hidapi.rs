@@ -1,10 +1,11 @@
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use tpm_i2c::tpm::I2CTpmAccessor;
 use tpm_i2c::{Error, TpmResult};
 
 pub struct MCP2221A {
-    device: hidapi::HidDevice,
+    device: Arc<Mutex<hidapi::HidDevice>>,
     i2c_addr_write: u8,
     i2c_addr_read: u8,
 }
@@ -13,7 +14,7 @@ impl MCP2221A {
     pub fn new(i2c_addr: u8) -> TpmResult<MCP2221A> {
         let device = hidapi::HidApi::new()?.open(0x04d8, 0x00dd)?;
         Ok(MCP2221A {
-            device,
+            device: Arc::new(Mutex::new(device)),
             i2c_addr_write: (i2c_addr << 1) | 1,
             i2c_addr_read: i2c_addr << 1,
         })
@@ -21,9 +22,9 @@ impl MCP2221A {
 
     pub fn wait_busy(&self) -> TpmResult<()> {
         loop {
-            self.device.write(&[0x10u8, 0, 0, 0, 0])?;
+            self.device.lock().unwrap().write(&[0x10u8, 0, 0, 0, 0])?;
             let mut buf = [0u8; 65];
-            self.device.read(&mut buf)?;
+            self.device.lock().unwrap().read(&mut buf)?;
             if buf[8] == 0 {
                 break;
             }
@@ -33,21 +34,27 @@ impl MCP2221A {
     }
 
     pub fn setup_i2c(&self) -> TpmResult<()> {
-        self.device.write(&[0x10u8, 0, 0, 0, 0])?;
+        self.device.lock().unwrap().write(&[0x10u8, 0, 0, 0, 0])?;
         let mut buf = [0u8; 65];
-        self.device.read(&mut buf)?;
+        self.device.lock().unwrap().read(&mut buf)?;
         if buf[8] != 0 {
             // need to cancel current transport
-            self.device.write(&[0x10u8, 0, 0x10, 0, 0])?;
+            self.device
+                .lock()
+                .unwrap()
+                .write(&[0x10u8, 0, 0x10, 0, 0])?;
             let mut buf = [0u8; 65];
-            self.device.read(&mut buf)?;
+            self.device.lock().unwrap().read(&mut buf)?;
 
             sleep(Duration::from_millis(250));
         }
         loop {
-            self.device.write(&[0x10u8, 0, 0, 0x20, 30])?;
+            self.device
+                .lock()
+                .unwrap()
+                .write(&[0x10u8, 0, 0, 0x20, 30])?;
             let mut buf = [0u8; 65];
-            self.device.read(&mut buf)?;
+            self.device.lock().unwrap().read(&mut buf)?;
             if buf[3] == 0x20 {
                 // changing success
                 break;
@@ -66,14 +73,14 @@ impl I2CTpmAccessor for MCP2221A {
     fn i2c_read(&mut self, read_buf: &mut [u8]) -> TpmResult<()> {
         self.wait_busy()?;
         let read_size = read_buf.len();
-        self.device.write(&[
+        self.device.lock().unwrap().write(&[
             0x91u8,
             (read_size & 255) as u8,
             ((read_size >> 8) & 255) as u8,
             self.i2c_addr_read,
         ])?;
         let mut res_buf = [0u8; 3];
-        self.device.read(&mut res_buf)?;
+        self.device.lock().unwrap().read(&mut res_buf)?;
         assert_eq!(res_buf[0], 0x91u8);
         // From Microchip's datasheet p.42:
         // res_buf[1] == 1 <=> "I2C engine is busy (command not completed)."
@@ -84,9 +91,9 @@ impl I2CTpmAccessor for MCP2221A {
         let mut retry = 0;
         let retry_max = read_size * 5 / 60;
         while offset < read_size {
-            self.device.write(&[0x40u8, 0, 0, 0])?;
+            self.device.lock().unwrap().write(&[0x40u8, 0, 0, 0])?;
             let mut tmp = [0u8; 65];
-            self.device.read(&mut tmp)?;
+            self.device.lock().unwrap().read(&mut tmp)?;
             assert_eq!(tmp[0], 0x40u8);
             let l = tmp[3] as usize;
             // From Microchip's datasheet p.44:
@@ -119,7 +126,7 @@ impl I2CTpmAccessor for MCP2221A {
         while offset < size {
             let write_size = (size - offset).min(60);
             let cmd = 0x90;
-            self.device.write(
+            self.device.lock().unwrap().write(
                 &[
                     &[
                         cmd,
@@ -132,7 +139,7 @@ impl I2CTpmAccessor for MCP2221A {
                 .concat(),
             )?;
             let mut read_buf = [0u8; 64];
-            self.device.read(&mut read_buf)?;
+            self.device.lock().unwrap().read(&mut read_buf)?;
             assert_eq!(read_buf[0], cmd);
             // From Microchip's datasheet p.39:
             // read_buf[1] == 1 <=> "I2C engine is busy (command not completed)."
