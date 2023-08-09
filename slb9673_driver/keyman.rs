@@ -36,7 +36,7 @@ pub struct TpmKeyManager {
     state_file_path: PathBuf,
     tpm: Tpm,
     state: State,
-    identities: Vec<ssh_agent_lib::proto::PublicKey>,
+    pub identities: Vec<ssh_agent_lib::proto::PublicKey>,
 }
 
 fn next_nonce() -> [u8; 16] {
@@ -196,6 +196,18 @@ impl TpmKeyManager {
         Ok(())
     }
 
+    pub fn setup(&mut self) -> Result<()> {
+        self.open_session()?;
+        if self.state.primary_handle.is_none() {
+            let res = self.create_primary_key("password".as_bytes())?;
+            self.state.primary_handle = Some(res.handle);
+        }
+
+        self.enumerate_identities()?;
+
+        Ok(())
+    }
+
     pub fn handle_message(
         &mut self,
         request: Message,
@@ -229,35 +241,38 @@ impl TpmKeyManager {
         }
     }
 
-    pub fn setup(&mut self) -> Result<()> {
-        self.open_session()?;
-        if self.state.primary_handle.is_none() {
-            let res = self.create_primary_key("password".as_bytes())?;
-            self.state.primary_handle = Some(res.handle);
-        }
-        println!("state: {:?}", &self.state);
-
+    pub fn enumerate_identities(&mut self) -> Result<()> {
         let public_data = self.tpm.read_public(self.state.primary_handle.unwrap())?;
         if let Some(x) = public_data.0.public_area {
             if let TpmuPublicIdentifier::Rsa(y) = x.unique {
-                let pubkey_modulus = [vec![0], y.buffer].concat();
-                let pubkey = PublicKey::new(
-                    KeyData::Rsa(RsaPublicKey {
-                        e: MPInt::from_bytes(&[0x01, 0x00, 0x01])?,
-                        n: MPInt::from_bytes(&pubkey_modulus)?,
-                    }),
-                    "tpm_key",
-                );
                 self.identities.push(ssh_agent_lib::proto::PublicKey::Rsa(
                     ssh_agent_lib::proto::RsaPublicKey {
                         e: vec![0x01, 0x00, 0x01],
-                        n: pubkey_modulus,
+                        n: [vec![0], y.buffer].concat(),
                     },
                 ));
-                println!("[+] Public key: {:?}", pubkey.to_openssh()?);
             }
         }
-
         Ok(())
+    }
+
+    #[allow(unused)]
+    pub fn get_dentities_as_ssh_format(&mut self) -> Result<Vec<String>> {
+        let mut res = vec![];
+        for identity in &self.identities {
+            if let ssh_agent_lib::proto::PublicKey::Rsa(pubkey) = identity {
+                res.push(
+                    PublicKey::new(
+                        KeyData::Rsa(RsaPublicKey {
+                            e: MPInt::from_bytes(&pubkey.e)?,
+                            n: MPInt::from_bytes(&pubkey.n)?,
+                        }),
+                        "tpm_key",
+                    )
+                    .to_openssh()?,
+                );
+            }
+        }
+        Ok(res)
     }
 }
