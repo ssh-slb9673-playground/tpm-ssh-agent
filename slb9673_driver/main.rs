@@ -91,18 +91,6 @@ fn main() -> Result<()> {
 
     keyman.lock().unwrap().setup()?;
 
-    println!(
-        "session handle: {:08x}",
-        keyman
-            .lock()
-            .unwrap()
-            .state
-            .session
-            .as_ref()
-            .unwrap()
-            .handle
-    );
-
     let socket = "connect.sock";
     let _ = std::fs::remove_file(socket);
 

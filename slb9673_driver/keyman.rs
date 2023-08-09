@@ -2,11 +2,10 @@ use crate::state::State;
 use crate::Result;
 use rand::prelude::*;
 use ssh_agent_lib::proto::message::{Identity, Message};
-use ssh_agent_lib::proto::{SignRequest, Signature};
+use ssh_agent_lib::proto::Signature;
 use ssh_key::public::{KeyData, RsaPublicKey};
 use ssh_key::{MPInt, PublicKey};
 use std::path::PathBuf;
-use std::sync::RwLock;
 use tpm_i2c::tpm::session::TpmSession;
 use tpm_i2c::tpm::structure::*;
 use tpm_i2c::tpm::{I2CTpmAccessor, Tpm};
@@ -34,10 +33,10 @@ fn get_null_symdefobj() -> TpmtSymdefObject {
 }
 
 pub struct TpmKeyManager {
-    pub state_file_path: PathBuf,
-    pub tpm: Tpm,
-    pub state: State,
-    pub identities: RwLock<Vec<ssh_agent_lib::proto::PublicKey>>,
+    state_file_path: PathBuf,
+    tpm: Tpm,
+    state: State,
+    identities: Vec<ssh_agent_lib::proto::PublicKey>,
 }
 
 fn next_nonce() -> [u8; 16] {
@@ -76,7 +75,7 @@ impl TpmKeyManager {
             state_file_path,
             tpm,
             state,
-            identities: RwLock::new(vec![]),
+            identities: vec![],
         })
     }
 
@@ -162,7 +161,7 @@ impl TpmKeyManager {
         Ok(())
     }
 
-    pub fn sign_raw(&mut self, msg: &[u8]) -> Result<Vec<u8>> {
+    pub fn sign(&mut self, msg: &[u8]) -> Result<Vec<u8>> {
         let digest = TpmiAlgorithmHash::Sha256.digest(msg);
         let sig = self.tpm.sign(
             self.state.primary_handle.unwrap(),
@@ -189,28 +188,12 @@ impl TpmKeyManager {
     }
 
     pub fn close(&mut self) -> Result<()> {
+        if let Some(session) = self.state.session.take() {
+            self.tpm.flush_context(session.handle)?;
+        }
         self.state.save(&self.state_file_path)?;
         self.tpm.shutdown(false)?;
         Ok(())
-    }
-
-    pub fn sign(
-        &mut self,
-        request: &SignRequest,
-    ) -> std::result::Result<Option<Signature>, Box<dyn std::error::Error>> {
-        if request.flags & ssh_agent_lib::proto::signature::RSA_SHA2_256 == 0 {
-            println!("Error: Unsupported algorithm has specified");
-            return Ok(None);
-        }
-
-        let algorithm = "rsa-sha2-256";
-
-        let res = self.sign_raw(&request.data)?;
-
-        Ok(Some(Signature {
-            algorithm: algorithm.to_string(),
-            blob: [res].concat(),
-        }))
     }
 
     pub fn handle_message(
@@ -222,7 +205,7 @@ impl TpmKeyManager {
         match request {
             Message::RequestIdentities => {
                 let mut identities = vec![];
-                for identity in self.identities.read().unwrap().iter() {
+                for identity in self.identities.iter() {
                     identities.push(Identity {
                         pubkey_blob: to_bytes(&identity)?,
                         comment: "tpm_key".to_string(),
@@ -231,11 +214,15 @@ impl TpmKeyManager {
                 Ok(Message::IdentitiesAnswer(identities))
             }
             Message::SignRequest(request) => {
-                if let Some(sig) = self.sign(&request)? {
-                    let signature = to_bytes(&sig)?;
-                    Ok(Message::SignResponse(signature))
-                } else {
+                if request.flags & ssh_agent_lib::proto::signature::RSA_SHA2_256 == 0 {
+                    println!("Error: Unsupported algorithm has specified");
                     Ok(Message::Failure)
+                } else {
+                    let signature = to_bytes(&Signature {
+                        algorithm: "rsa-sha2-256".to_string(),
+                        blob: self.sign(&request.data)?,
+                    })?;
+                    Ok(Message::SignResponse(signature))
                 }
             }
             _ => Err(format!("Unknown message: {:?}", request).into()),
@@ -261,15 +248,12 @@ impl TpmKeyManager {
                     }),
                     "tpm_key",
                 );
-                self.identities
-                    .write()
-                    .unwrap()
-                    .push(ssh_agent_lib::proto::PublicKey::Rsa(
-                        ssh_agent_lib::proto::RsaPublicKey {
-                            e: vec![0x01, 0x00, 0x01],
-                            n: pubkey_modulus,
-                        },
-                    ));
+                self.identities.push(ssh_agent_lib::proto::PublicKey::Rsa(
+                    ssh_agent_lib::proto::RsaPublicKey {
+                        e: vec![0x01, 0x00, 0x01],
+                        n: pubkey_modulus,
+                    },
+                ));
                 println!("[+] Public key: {:?}", pubkey.to_openssh()?);
             }
         }
