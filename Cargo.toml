@@ -40,3 +40,4 @@ sm3 = "0.4.2"
 ssh-agent-lib = "0.2.5"
 ssh-key = { version = "0.5.1", features = ["rsa"] }
 subenum = "1.0.1"
+tokio = "1.30.0"
