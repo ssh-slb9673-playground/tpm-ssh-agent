@@ -15,6 +15,8 @@ An implementation of TCTI / TPM API over I2C that used internally at tpm-ssh-age
 * [TCG TPM I2C Interface Specification](https://trustedcomputinggroup.org/resource/tcg-tpm-i2c-interface-specification/)
 * [TCG PC Client Device Driver Design Principles for TPM 2.0](https://trustedcomputinggroup.org/resource/tcg-pc-client-device-driver-design-principles-for-tpm-2-0/)
 * [NIST SP 800-108 rev. 1 Recommendation for Key Derivation Using Pseudorandom Functions](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-108r1.pdf)
+* [RFC4253: The Secure Shell (SSH) Transport Layer Protocol](https://datatracker.ietf.org/doc/html/rfc4253)
+* [RFC4432: RSA Key Exchange for the Secure Shell (SSH) Transport Layer Protocol](https://datatracker.ietf.org/doc/html/rfc4432)
 * [RFC8332: Use of RSA Keys with SHA-256 and SHA-512 in the Secure Shell (SSH) Protocol](https://datatracker.ietf.org/doc/html/rfc8332)
 * [draft-miller-ssh-agent-04: SSH Agent Protocol](https://datatracker.ietf.org/doc/html/draft-miller-ssh-agent-04)
 * [microsoft / TSS.MSR](https://github.com/microsoft/TSS.MSR)
