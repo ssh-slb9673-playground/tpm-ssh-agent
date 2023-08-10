@@ -51,14 +51,12 @@ impl TpmSession {
     }
 
     pub fn rotate_nonce(&mut self) {
-        println!("rotate nonce");
         if let Some(x) = self.nonce_new.take() {
             self.nonce = (x, self.nonce.0.clone());
         }
     }
 
     pub fn refresh_nonce(&mut self) {
-        println!("refresh nonce");
         self.nonce_new = Some(gen_nonce().to_vec());
     }
 
@@ -67,7 +65,6 @@ impl TpmSession {
     }
 
     pub fn set_tpm_nonce(&mut self, nonce: Vec<u8>) {
-        println!("set tpm nonce");
         self.rotate_nonce();
         self.nonce_new = Some(nonce);
         self.rotate_nonce();

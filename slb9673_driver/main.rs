@@ -1,29 +1,14 @@
+mod agent;
 mod driver;
 mod error;
 mod keyman;
 mod state;
-use ssh_agent_lib::proto::message::Message;
+
+use crate::agent::TpmSshAgent;
+use crate::error::Result;
 use ssh_agent_lib::Agent;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-
-pub use error::{Error, Result};
-
-pub struct TpmSshAgent {
-    keyman: Arc<Mutex<keyman::TpmKeyManager>>,
-}
-
-impl Agent for TpmSshAgent {
-    type Error = ();
-
-    fn handle(&self, message: Message) -> std::result::Result<Message, ()> {
-        let mut keyman = self.keyman.lock().unwrap();
-        keyman.handle_message(message).or_else(|error| {
-            println!("Error handling message - {:?}", error);
-            Ok(Message::Failure)
-        })
-    }
-}
 
 #[allow(unused_must_use)]
 fn main() -> Result<()> {
@@ -34,19 +19,10 @@ fn main() -> Result<()> {
         Box::new(driver::hidapi::MCP2221A::new(0x2e)?),
     )?));
 
-    let agent = TpmSshAgent {
-        keyman: keyman.clone(),
-    };
-
-    let keyman_for_handler = keyman.clone();
-    ctrlc::set_handler(move || {
-        keyman_for_handler.lock().unwrap().close();
-        println!("saved");
-        std::process::exit(0);
-    })
-    .expect("Error setting Ctrl-C handler");
-
-    keyman.lock().unwrap().setup()?;
+    let agent = TpmSshAgent::new(keyman.clone())?;
+    for pubkey in agent.get_identities_as_ssh_format()? {
+        println!("[+] SSH Public Key: {}", pubkey);
+    }
 
     let socket = "connect.sock";
     let _ = std::fs::remove_file(socket);

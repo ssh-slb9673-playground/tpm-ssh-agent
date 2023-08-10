@@ -1,42 +1,21 @@
 use crate::state::State;
 use crate::Result;
 use rand::prelude::*;
-use ssh_agent_lib::proto::message::{Identity, Message};
-use ssh_agent_lib::proto::Signature;
-use ssh_key::public::{KeyData, RsaPublicKey};
-use ssh_key::{MPInt, PublicKey};
 use std::path::PathBuf;
-use tpm_i2c::tpm::session::TpmSession;
 use tpm_i2c::tpm::structure::*;
 use tpm_i2c::tpm::{I2CTpmAccessor, Tpm};
 
-fn get_rsa_public_template(bits: u16, symmetric: TpmtSymdefObject) -> TpmuPublicParams {
-    TpmuPublicParams::RsaDetail(TpmsRsaParams {
-        symmetric,
-        scheme: TpmtRsaScheme {
-            scheme: TpmiAlgorithmRsaScheme::RsaSsa,
-            details: TpmuAsymmetricScheme::Signature(TpmsSignatureScheme::AX(TpmsSchemeHash {
-                hash_algorithm: TpmiAlgorithmHash::Sha256,
-            })),
-        },
-        key_bits: bits,
-        exponent: 65537,
-    })
-}
-
-fn get_null_symdefobj() -> TpmtSymdefObject {
-    TpmtSymdefObject {
-        algorithm: TpmiAlgorithmSymObject::Null,
-        key_bits: TpmuSymKeybits::Null,
-        mode: TpmuSymMode::Null,
-    }
+#[derive(Debug)]
+pub struct RsaPublicKey {
+    pub e: Vec<u8>,
+    pub n: Vec<u8>,
 }
 
 pub struct TpmKeyManager {
     state_file_path: PathBuf,
     tpm: Tpm,
     state: State,
-    pub identities: Vec<ssh_agent_lib::proto::PublicKey>,
+    pub identities: Vec<RsaPublicKey>,
 }
 
 fn next_nonce() -> [u8; 16] {
@@ -79,6 +58,27 @@ impl TpmKeyManager {
         })
     }
 
+    pub fn setup(&mut self) -> Result<()> {
+        self.open_session()?;
+        if self.state.primary_handle.is_none() {
+            let res = self.create_primary_key("password".as_bytes())?;
+            self.state.primary_handle = Some(res.handle);
+        }
+
+        self.enumerate_identities()?;
+
+        Ok(())
+    }
+
+    pub fn close(&mut self) -> Result<()> {
+        if let Some(session) = self.state.session.take() {
+            self.tpm.flush_context(session.handle)?;
+        }
+        self.state.save(&self.state_file_path)?;
+        self.tpm.shutdown(false)?;
+        Ok(())
+    }
+
     fn remove_handles(tpm: &mut Tpm, ht: TpmHandleType) -> Result<()> {
         use tpm_i2c::tpm::structure::*;
         if let TpmuCapabilities::Handles(x) = &tpm
@@ -119,7 +119,23 @@ impl TpmKeyManager {
                         .with_sign_or_encrypt(true)
                         .with_user_with_auth(true),
                     auth_policy: Tpm2BDigest::new(&[]),
-                    parameters: get_rsa_public_template(2048, get_null_symdefobj()),
+                    parameters: TpmuPublicParams::RsaDetail(TpmsRsaParams {
+                        symmetric: TpmtSymdefObject {
+                            algorithm: TpmiAlgorithmSymObject::Null,
+                            key_bits: TpmuSymKeybits::Null,
+                            mode: TpmuSymMode::Null,
+                        },
+                        scheme: TpmtRsaScheme {
+                            scheme: TpmiAlgorithmRsaScheme::RsaSsa,
+                            details: TpmuAsymmetricScheme::Signature(TpmsSignatureScheme::AX(
+                                TpmsSchemeHash {
+                                    hash_algorithm: TpmiAlgorithmHash::Sha256,
+                                },
+                            )),
+                        },
+                        key_bits: 2048,
+                        exponent: 65537,
+                    }),
                     unique: TpmuPublicIdentifier::Rsa(Tpm2BDigest::new(&[])),
                 }),
                 Tpm2BData::new(&[]),
@@ -130,34 +146,24 @@ impl TpmKeyManager {
             .map_err(|err| err.into())
     }
 
-    fn create_session(&mut self, first_nonce: &[u8]) -> Result<TpmSession> {
-        self.tpm
-            .start_auth_session(
-                TpmiDhObject::Null,
-                TpmiDhEntity::Null,
-                Tpm2BNonce::new(first_nonce),
-                Tpm2BEncryptedSecret::new(&[]),
-                TpmSessionType::Hmac,
-                TpmtSymdef {
-                    algorithm: TpmiAlgorithmSymmetric::Null,
-                    key_bits: TpmuSymKeybits::Null,
-                    mode: TpmuSymMode::Null,
-                },
-                TpmiAlgorithmHash::Sha256,
-                vec![],
-            )
-            .map_or_else(
-                |err| Err(err.into()),
-                |mut x| {
-                    x.attributes.set_continue_session(true);
-                    Ok(x)
-                },
-            )
-    }
-
     fn open_session(&mut self) -> Result<()> {
-        TpmKeyManager::remove_handles(&mut self.tpm, TpmHandleType::HmacOrLoadedSession)?;
-        self.state.session = Some(self.create_session(&next_nonce())?);
+        let mut session = self.tpm.start_auth_session(
+            TpmiDhObject::Null,
+            TpmiDhEntity::Null,
+            Tpm2BNonce::new(&next_nonce()),
+            Tpm2BEncryptedSecret::new(&[]),
+            TpmSessionType::Hmac,
+            TpmtSymdef {
+                algorithm: TpmiAlgorithmSymmetric::Null,
+                key_bits: TpmuSymKeybits::Null,
+                mode: TpmuSymMode::Null,
+            },
+            TpmiAlgorithmHash::Sha256,
+            vec![],
+        )?;
+        session.attributes.set_continue_session(true);
+
+        self.state.session = Some(session);
         Ok(())
     }
 
@@ -187,92 +193,16 @@ impl TpmKeyManager {
         })
     }
 
-    pub fn close(&mut self) -> Result<()> {
-        if let Some(session) = self.state.session.take() {
-            self.tpm.flush_context(session.handle)?;
-        }
-        self.state.save(&self.state_file_path)?;
-        self.tpm.shutdown(false)?;
-        Ok(())
-    }
-
-    pub fn setup(&mut self) -> Result<()> {
-        self.open_session()?;
-        if self.state.primary_handle.is_none() {
-            let res = self.create_primary_key("password".as_bytes())?;
-            self.state.primary_handle = Some(res.handle);
-        }
-
-        self.enumerate_identities()?;
-
-        Ok(())
-    }
-
-    pub fn handle_message(
-        &mut self,
-        request: Message,
-    ) -> std::result::Result<Message, Box<dyn std::error::Error>> {
-        use ssh_agent_lib::proto::to_bytes;
-
-        match request {
-            Message::RequestIdentities => {
-                let mut identities = vec![];
-                for identity in self.identities.iter() {
-                    identities.push(Identity {
-                        pubkey_blob: to_bytes(&identity)?,
-                        comment: "tpm_key".to_string(),
-                    });
-                }
-                Ok(Message::IdentitiesAnswer(identities))
-            }
-            Message::SignRequest(request) => {
-                if request.flags & ssh_agent_lib::proto::signature::RSA_SHA2_256 == 0 {
-                    println!("Error: Unsupported algorithm has specified");
-                    Ok(Message::Failure)
-                } else {
-                    let signature = to_bytes(&Signature {
-                        algorithm: "rsa-sha2-256".to_string(),
-                        blob: self.sign(&request.data)?,
-                    })?;
-                    Ok(Message::SignResponse(signature))
-                }
-            }
-            _ => Err(format!("Unknown message: {:?}", request).into()),
-        }
-    }
-
     pub fn enumerate_identities(&mut self) -> Result<()> {
         let public_data = self.tpm.read_public(self.state.primary_handle.unwrap())?;
         if let Some(x) = public_data.0.public_area {
             if let TpmuPublicIdentifier::Rsa(y) = x.unique {
-                self.identities.push(ssh_agent_lib::proto::PublicKey::Rsa(
-                    ssh_agent_lib::proto::RsaPublicKey {
-                        e: vec![0x01, 0x00, 0x01],
-                        n: [vec![0], y.buffer].concat(),
-                    },
-                ));
+                self.identities.push(RsaPublicKey {
+                    e: vec![0x01, 0x00, 0x01],
+                    n: [vec![0], y.buffer].concat(),
+                });
             }
         }
         Ok(())
-    }
-
-    #[allow(unused)]
-    pub fn get_dentities_as_ssh_format(&mut self) -> Result<Vec<String>> {
-        let mut res = vec![];
-        for identity in &self.identities {
-            if let ssh_agent_lib::proto::PublicKey::Rsa(pubkey) = identity {
-                res.push(
-                    PublicKey::new(
-                        KeyData::Rsa(RsaPublicKey {
-                            e: MPInt::from_bytes(&pubkey.e)?,
-                            n: MPInt::from_bytes(&pubkey.n)?,
-                        }),
-                        "tpm_key",
-                    )
-                    .to_openssh()?,
-                );
-            }
-        }
-        Ok(res)
     }
 }
