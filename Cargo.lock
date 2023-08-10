@@ -1143,34 +1143,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "slb9673_driver"
-version = "0.1.0"
-dependencies = [
- "bitfield-struct",
- "bitflags 2.3.3",
- "ctrlc",
- "digest 0.10.7",
- "enum-iterator",
- "hex-literal",
- "hidapi",
- "hmac",
- "i2cdev",
- "num-derive",
- "num-traits",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "sha1",
- "sha2 0.10.7",
- "sha3",
- "sm3",
- "ssh-agent-lib",
- "ssh-key",
- "subenum",
- "tokio 1.30.0",
-]
-
-[[package]]
 name = "sm3"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1492,6 +1464,34 @@ dependencies = [
  "tokio-codec",
  "tokio-io",
  "tokio-reactor",
+]
+
+[[package]]
+name = "tpm-ssh-agent"
+version = "0.1.0"
+dependencies = [
+ "bitfield-struct",
+ "bitflags 2.3.3",
+ "ctrlc",
+ "digest 0.10.7",
+ "enum-iterator",
+ "hex-literal",
+ "hidapi",
+ "hmac",
+ "i2cdev",
+ "num-derive",
+ "num-traits",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2 0.10.7",
+ "sha3",
+ "sm3",
+ "ssh-agent-lib",
+ "ssh-key",
+ "subenum",
+ "tokio 1.30.0",
 ]
 
 [[package]]
