@@ -61,7 +61,7 @@ impl_to_tpm! {
         match self {
             TpmuSignature::Rsa(scheme) => scheme.to_tpm(),
             TpmuSignature::Ecc(scheme) => scheme.to_tpm(),
-            TpmuSignature::Hmac(scheme) => todo!(),
+            TpmuSignature::Hmac(_scheme) => todo!(),
             TpmuSignature::Any(scheme) => scheme.to_tpm(),
             TpmuSignature::Null => vec![],
         }
@@ -102,8 +102,8 @@ impl_from_tpm! {
 
 impl_from_tpm_with_selector! {
     TpmuSignature<TpmiAlgorithmSigScheme>(v, selector) {
-        let t = selector.get_type();
-        let selector_asym : TpmiAlgorithmAsymmetricScheme =
+        let _t = selector.get_type();
+        let _selector_asym : TpmiAlgorithmAsymmetricScheme =
             num_traits::FromPrimitive::from_u32(
                 num_traits::ToPrimitive::to_u32(selector).unwrap()
             ).unwrap();
