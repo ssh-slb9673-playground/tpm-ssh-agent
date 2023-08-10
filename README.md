@@ -1,7 +1,11 @@
-tpm\_i2c / slb9673\_driver
+tpm-ssh-agent / tpm\_i2c
 ============================
 
-A protocol stack of TPM (Trusted Platform Module) over I2C.
+## tpm-ssh-agent
+A SSH agent implementation using TPM-stored RSA-2048 key
+
+## tpm\_i2c
+An implementation of TCTI / TPM API over I2C that used internally at tpm-ssh-agent
 
 ## References
 * [OPTIGA™ TPM SLB 9673 TPM2.0 Data Sheet](https://www.infineon.com/dgdl/Infineon-OPTIGA+TPM+SLB+9673+FW26-DataSheet-v01_02-EN.pdf?fileId=8ac78c8c821f389001826301ac645a26)

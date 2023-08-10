@@ -1,5 +1,5 @@
 [package]
-name = "slb9673_driver"
+name = "tpm-ssh-agent"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,8 +10,8 @@ name = "tpm_i2c"
 path = "tpm_i2c/lib.rs"
 
 [[bin]]
-name = "slb9673_driver"
-path = "slb9673_driver/main.rs"
+name = "tpm-ssh-agent"
+path = "tpm-ssh-agent/main.rs"
 
 [features]
 default = ["hidapi"]
