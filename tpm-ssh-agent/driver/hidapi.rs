@@ -21,6 +21,7 @@ impl MCP2221A {
     }
 
     pub fn wait_busy(&self) -> TpmResult<()> {
+        let mut count = 0;
         loop {
             self.device.lock().unwrap().write(&[0x10u8, 0, 0, 0, 0])?;
             let mut buf = [0u8; 65];
@@ -29,6 +30,10 @@ impl MCP2221A {
                 break;
             }
             sleep(Duration::from_millis(50));
+            if count < 1000 {
+                return Err(Error::Hardware);
+            }
+            count += 1;
         }
         Ok(())
     }
@@ -52,7 +57,7 @@ impl MCP2221A {
             self.device
                 .lock()
                 .unwrap()
-                .write(&[0x10u8, 0, 0, 0x20, 30])?;
+                .write(&[0x10u8, 0, 0, 0x20, 26])?;
             let mut buf = [0u8; 65];
             self.device.lock().unwrap().read(&mut buf)?;
             if buf[3] == 0x20 {
@@ -89,7 +94,7 @@ impl I2CTpmAccessor for MCP2221A {
         }
         let mut offset = 0;
         let mut retry = 0;
-        let retry_max = read_size * 5 / 60;
+        let retry_max = (read_size * 5 / 60).max(5);
         while offset < read_size {
             self.device.lock().unwrap().write(&[0x40u8, 0, 0, 0])?;
             let mut tmp = [0u8; 65];
@@ -101,8 +106,7 @@ impl I2CTpmAccessor for MCP2221A {
             // tmp[3] == 127 <=> "This value is signaled when an error has occurred and the following data should not be taken into account"
             if tmp[1] == 0x41 || tmp[3] == 127 {
                 retry += 1;
-                if retry == retry_max {
-                    dbg!(&read_buf);
+                if retry >= retry_max {
                     return Err(Error::Hardware);
                 }
                 sleep(Duration::from_millis(5));
@@ -154,6 +158,7 @@ impl I2CTpmAccessor for MCP2221A {
             }
             offset += write_size;
         }
+        self.wait_busy()?;
 
         Ok(())
     }
