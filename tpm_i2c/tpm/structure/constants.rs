@@ -102,6 +102,7 @@ pub enum TpmSessionType {
     Trial = 3,
 }
 
+// for Infineon SLB 9673
 pub const MAX_LOADED_OBJECTS: u32 = 3;
 pub const MAX_ACTIVE_SESSIONS: u32 = 64;
 pub const MAX_SESSION_NUM: u32 = 3;
