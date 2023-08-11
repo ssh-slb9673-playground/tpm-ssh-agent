@@ -2,7 +2,7 @@ tpm-ssh-agent / tpm\_i2c
 ============================
 
 ## tpm-ssh-agent
-A SSH agent implementation using TPM-stored ~~RSA-2048 key~~ NIST secp256r1 ECDSA key
+A SSH agent implementation using TPM-stored ~~RSA-2048 key~~ secp256r1 ECDSA key
 
 ## tpm\_i2c
 An implementation of TCTI / TPM API over I2C that used internally at tpm-ssh-agent
