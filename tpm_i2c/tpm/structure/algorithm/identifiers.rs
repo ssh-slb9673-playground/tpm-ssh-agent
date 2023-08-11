@@ -22,7 +22,8 @@ use subenum::subenum;
     TpmiAlgorithmCipherMode, // !ALG.SE
     TpmiAlgorithmPublic, // !ALG.o
     TpmiAlgorithmAsymmetricScheme, // !ALG.am + !ALG.ax + !ALG.ae
-    TpmiAlgorithmRsaScheme, // In specification: !ALG.ae + !ALG.ax but I used tpm2-tss's definition (RSA-related definition)
+    TpmiAlgorithmRsaScheme, // In specification: !ALG.ae + !ALG.ax but I used tpm2-tss's definition (RSA-related only) https://github.com/tpm2-software/tpm2-tss/blob/86949f7bd757a3202cf53bff4809264784b3dd07/src/tss2-fapi/tpm_json_serialize.c#L3195
+    TpmiAlgorithmEccScheme, // In specification: !ALG.ax + !ALG.am but I used tpm-tss's definition (ECC-related only) https://github.com/tpm2-software/tpm2-tss/blob/86949f7bd757a3202cf53bff4809264784b3dd07/src/tss2-fapi/tpm_json_serialize.c#L3351
 )]
 #[derive(
     FromPrimitive,
@@ -75,7 +76,8 @@ pub enum TpmAlgorithmIdentifier {
         TpmiAlgorithmCipherMode,
         TpmiAlgorithmPublic,
         TpmiAlgorithmAsymmetricScheme,
-        TpmiAlgorithmRsaScheme
+        TpmiAlgorithmRsaScheme,
+        TpmiAlgorithmEccScheme
     )]
     Null = 0x0010,
     #[subenum(TpmiAlgorithmHash, TpmiAlgorithmMacScheme)]
@@ -98,19 +100,36 @@ pub enum TpmAlgorithmIdentifier {
     RsaPss = 0x0016,
     #[subenum(TpmiAlgorithmAsymmetricScheme, TpmiAlgorithmRsaScheme)]
     Oaep = 0x0017,
-    #[subenum(TpmiAlgorithmSigScheme, TpmiAlgorithmAsymmetricScheme)]
+    #[subenum(
+        TpmiAlgorithmSigScheme,
+        TpmiAlgorithmAsymmetricScheme,
+        TpmiAlgorithmEccScheme
+    )]
     EcDsa = 0x0018,
-    #[subenum(TpmiAlgorithmEccKeyXchg, TpmiAlgorithmAsymmetricScheme)]
+    #[subenum(
+        TpmiAlgorithmEccKeyXchg,
+        TpmiAlgorithmAsymmetricScheme,
+        TpmiAlgorithmEccScheme
+    )]
     EcDh = 0x0019,
-    #[subenum(TpmiAlgorithmSigScheme, TpmiAlgorithmAsymmetricScheme)]
+    #[subenum(
+        TpmiAlgorithmSigScheme,
+        TpmiAlgorithmAsymmetricScheme,
+        TpmiAlgorithmEccScheme
+    )]
     EcDaa = 0x001a,
     #[subenum(
         TpmiAlgorithmSigScheme,
         TpmiAlgorithmEccKeyXchg,
-        TpmiAlgorithmAsymmetricScheme
+        TpmiAlgorithmAsymmetricScheme,
+        TpmiAlgorithmEccScheme
     )]
     Sm2 = 0x001b,
-    #[subenum(TpmiAlgorithmSigScheme, TpmiAlgorithmAsymmetricScheme)]
+    #[subenum(
+        TpmiAlgorithmSigScheme,
+        TpmiAlgorithmAsymmetricScheme,
+        TpmiAlgorithmEccScheme
+    )]
     EcSchnorr = 0x001c,
     #[subenum(TpmiAlgorithmEccKeyXchg, TpmiAlgorithmAsymmetricScheme)]
     EcMqv = 0x001d,
@@ -174,6 +193,7 @@ set_tpm_data_codec!(
     unpack_u16_to_enum
 );
 set_tpm_data_codec!(TpmiAlgorithmRsaScheme, pack_enum_to_u16, unpack_u16_to_enum);
+set_tpm_data_codec!(TpmiAlgorithmEccScheme, pack_enum_to_u16, unpack_u16_to_enum);
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum TpmAlgorithmType {
@@ -243,7 +263,7 @@ impl TpmAlgorithm for TpmAlgorithmIdentifier {
     }
 }
 
-macro_rules! impl_subenums {
+macro_rules! impl_get_type_for_subenums {
     ($name:ident) => {
         impl TpmAlgorithm for $name {
             fn get_type(&self) -> HashSet<TpmAlgorithmType> {
@@ -253,19 +273,20 @@ macro_rules! impl_subenums {
     };
 }
 
-impl_subenums!(TpmiAlgorithmHash);
-impl_subenums!(TpmiAlgorithmAsymmetric);
-impl_subenums!(TpmiAlgorithmSymmetric);
-impl_subenums!(TpmiAlgorithmSymObject);
-impl_subenums!(TpmiAlgorithmSymMode);
-impl_subenums!(TpmiAlgorithmKdf);
-impl_subenums!(TpmiAlgorithmSigScheme);
-impl_subenums!(TpmiAlgorithmEccKeyXchg);
-impl_subenums!(TpmiAlgorithmMacScheme);
-impl_subenums!(TpmiAlgorithmCipherMode);
-impl_subenums!(TpmiAlgorithmPublic);
-impl_subenums!(TpmiAlgorithmAsymmetricScheme);
-impl_subenums!(TpmiAlgorithmRsaScheme);
+impl_get_type_for_subenums!(TpmiAlgorithmHash);
+impl_get_type_for_subenums!(TpmiAlgorithmAsymmetric);
+impl_get_type_for_subenums!(TpmiAlgorithmSymmetric);
+impl_get_type_for_subenums!(TpmiAlgorithmSymObject);
+impl_get_type_for_subenums!(TpmiAlgorithmSymMode);
+impl_get_type_for_subenums!(TpmiAlgorithmKdf);
+impl_get_type_for_subenums!(TpmiAlgorithmSigScheme);
+impl_get_type_for_subenums!(TpmiAlgorithmEccKeyXchg);
+impl_get_type_for_subenums!(TpmiAlgorithmMacScheme);
+impl_get_type_for_subenums!(TpmiAlgorithmCipherMode);
+impl_get_type_for_subenums!(TpmiAlgorithmPublic);
+impl_get_type_for_subenums!(TpmiAlgorithmAsymmetricScheme);
+impl_get_type_for_subenums!(TpmiAlgorithmRsaScheme);
+impl_get_type_for_subenums!(TpmiAlgorithmEccScheme);
 
 impl TpmiAlgorithmHash {
     pub fn digest(&self, message: &[u8]) -> Vec<u8> {

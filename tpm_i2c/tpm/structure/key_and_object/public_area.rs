@@ -1,8 +1,9 @@
 use crate::tpm::structure::macro_defs::{impl_from_tpm, impl_from_tpm_with_selector, impl_to_tpm};
 use crate::tpm::structure::{
     Tpm2BDigest, Tpm2BPublicKeyRsa, TpmAlgorithm, TpmAlgorithmType, TpmAttrObject, TpmKeyBits,
-    TpmiAlgorithmAsymmetricScheme, TpmiAlgorithmHash, TpmiAlgorithmPublic, TpmsEccPoint, TpmsEmpty,
-    TpmsSymcipherParams, TpmtRsaScheme, TpmtSymdefObject,
+    TpmiAlgorithmAsymmetricScheme, TpmiAlgorithmHash, TpmiAlgorithmPublic, TpmiEccCurve,
+    TpmsEccPoint, TpmsEmpty, TpmsSymcipherParams, TpmtEccScheme, TpmtKdfScheme, TpmtRsaScheme,
+    TpmtSymdefObject,
 };
 use crate::tpm::{FromTpm, FromTpmWithSelector, ToTpm, TpmError};
 use crate::util::{p16be, u16be};
@@ -29,7 +30,15 @@ pub enum TpmuPublicParams {
     // keydeHashDetail
     SymDetail(TpmsSymcipherParams),
     RsaDetail(TpmsRsaParams),
-    // EccDetail(TpmsEccParams),
+    EccDetail(TpmsEccParams),
+}
+
+#[derive(Debug)]
+pub struct TpmsEccParams {
+    pub symmetric: TpmtSymdefObject,
+    pub scheme: TpmtEccScheme,
+    pub curve_id: TpmiEccCurve,
+    pub kdf: TpmtKdfScheme,
 }
 
 #[derive(Debug)]
@@ -119,11 +128,10 @@ impl_to_tpm! {
     }
 
     TpmuPublicParams(self) {
-        match &self {
-            TpmuPublicParams::SymDetail(params) => params.to_tpm(),
-            TpmuPublicParams::RsaDetail(params) => [
-                params.to_tpm(),
-            ].concat(),
+        match self {
+            Self::SymDetail(params) => params.to_tpm(),
+            Self::RsaDetail(params) => params.to_tpm(),
+            Self::EccDetail(params) => params.to_tpm(),
         }
     }
 
@@ -187,6 +195,15 @@ impl_to_tpm! {
         [
             self.scheme.to_tpm(),
             self.details.to_tpm(),
+        ].concat()
+    }
+
+    TpmsEccParams(self) {
+        [
+            self.symmetric.to_tpm(),
+            self.scheme.to_tpm(),
+            self.curve_id.to_tpm(),
+            self.kdf.to_tpm(),
         ].concat()
     }
 }
@@ -257,6 +274,20 @@ impl_from_tpm! {
             exponent,
         }, v))
     }
+
+    TpmsEccParams(v) {
+        let (symmetric, v) = TpmtSymdefObject::from_tpm(v)?;
+        let (scheme, v) = TpmtEccScheme::from_tpm(v)?;
+        let (curve_id, v) = TpmiEccCurve::from_tpm(v)?;
+        let (kdf, v) = TpmtKdfScheme::from_tpm(v)?;
+
+        Ok((TpmsEccParams {
+            symmetric,
+            scheme,
+            curve_id,
+            kdf
+        }, v))
+    }
 }
 
 impl_from_tpm_with_selector! {
@@ -268,6 +299,9 @@ impl_from_tpm_with_selector! {
         } else if selector == &TpmiAlgorithmPublic::Rsa {
             let (ret, v) = TpmsRsaParams::from_tpm(v)?;
             Ok((TpmuPublicParams::RsaDetail(ret), v))
+        } else if selector == &TpmiAlgorithmPublic::Ecc {
+            let (ret, v) = TpmsEccParams::from_tpm(v)?;
+            Ok((TpmuPublicParams::EccDetail(ret), v))
         } else {
             Err(TpmError::create_parse_error(&format!(
                 "Invalid selector specified: {:?}",

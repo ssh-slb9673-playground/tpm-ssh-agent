@@ -123,6 +123,22 @@ pub enum TpmCapabilities {
     Act = 10,
 }
 
+#[derive(FromPrimitive, ToPrimitive, Debug)]
+#[repr(u16)]
+pub enum TpmEccCurve {
+    EccNone = 0x00,
+    NistP192 = 0x01,
+    NistP224 = 0x02,
+    NistP256 = 0x03,
+    NistP384 = 0x04,
+    NistP521 = 0x05,
+    BnP256 = 0x10,
+    BnP638 = 0x11,
+    Sm2P256 = 0x20,
+}
+
+pub type TpmiEccCurve = TpmEccCurve;
+
 pub(super) fn pack_enum_to_u8<T>(_self: &T) -> Vec<u8>
 where
     T: num_traits::ToPrimitive,
@@ -154,3 +170,4 @@ set_tpm_data_codec!(TpmHandleType, pack_enum_to_u32, unpack_u32_to_enum);
 set_tpm_data_codec!(TpmHandleConstants, pack_enum_to_u32, unpack_u32_to_enum);
 set_tpm_data_codec!(TpmSessionType, pack_enum_to_u8, unpack_u8_to_enum);
 set_tpm_data_codec!(TpmCapabilities, pack_enum_to_u32, unpack_u32_to_enum);
+set_tpm_data_codec!(TpmEccCurve, pack_enum_to_u16, unpack_u16_to_enum);

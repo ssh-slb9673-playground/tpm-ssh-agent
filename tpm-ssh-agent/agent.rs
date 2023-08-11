@@ -1,9 +1,10 @@
 use crate::error::Result;
 use crate::keyman::TpmKeyManager;
 use ssh_agent_lib::proto::message::{Identity, Message};
-use ssh_agent_lib::proto::PublicKey::Rsa;
-use ssh_agent_lib::proto::{signature, RsaPublicKey, Signature};
+use ssh_agent_lib::proto::PublicKey::EcDsa;
+use ssh_agent_lib::proto::{EcDsaPublicKey, Signature};
 use ssh_agent_lib::Agent;
+use ssh_key::MPInt;
 use std::sync::{Arc, Mutex};
 
 pub struct TpmSshAgent {
@@ -14,7 +15,8 @@ impl Agent for TpmSshAgent {
     type Error = ();
 
     fn handle(&self, message: Message) -> std::result::Result<Message, ()> {
-        self.handle_message(message).or(Ok(Message::Failure))
+        let res = self.handle_message(message).or(Ok(Message::Failure));
+        res
     }
 }
 
@@ -47,9 +49,9 @@ impl TpmSshAgent {
                 let mut identities = vec![];
                 for identity in keyman.identities.iter() {
                     identities.push(Identity {
-                        pubkey_blob: to_bytes(&Rsa(RsaPublicKey {
-                            e: identity.e.clone(),
-                            n: identity.n.clone(),
+                        pubkey_blob: to_bytes(&EcDsa(EcDsaPublicKey {
+                            identifier: "nistp256".to_string(),
+                            q: Self::point_compression(identity),
                         }))?,
                         comment: "tpm_key".to_string(),
                     });
@@ -57,38 +59,58 @@ impl TpmSshAgent {
                 Ok(Message::IdentitiesAnswer(identities))
             }
             Message::SignRequest(request) => {
-                if request.flags & signature::RSA_SHA2_256 == 0 {
-                    println!("Error: Unsupported algorithm has specified");
-                    Ok(Message::Failure)
-                } else {
-                    let signature = to_bytes(&Signature {
-                        algorithm: "rsa-sha2-256".to_string(),
-                        blob: keyman.sign(&request.data)?,
-                    })?;
-                    Ok(Message::SignResponse(signature))
-                }
+                let (r, s) = keyman.sign(&request.data)?;
+                let signature = to_bytes(&Signature {
+                    algorithm: "ecdsa-sha2-nistp256".to_string(),
+                    blob: [
+                        MPInt::from_positive_bytes(&r)
+                            .unwrap()
+                            .as_positive_bytes()
+                            .unwrap(),
+                        MPInt::from_positive_bytes(&s)
+                            .unwrap()
+                            .as_positive_bytes()
+                            .unwrap(),
+                    ]
+                    .concat(),
+                })?;
+                Ok(Message::SignResponse(signature))
             }
             _ => Err(format!("Unknown message: {:?}", request).into()),
         }
     }
 
     pub fn get_identities_as_ssh_format(&self) -> Result<Vec<String>> {
-        use ssh_key::public::{KeyData, RsaPublicKey};
-        use ssh_key::{MPInt, PublicKey};
+        use ssh_key::public::{EcdsaPublicKey, KeyData};
+        use ssh_key::PublicKey;
 
         let mut res = vec![];
         for identity in &self.keyman.lock().unwrap().identities {
             res.push(
                 PublicKey::new(
-                    KeyData::Rsa(RsaPublicKey {
-                        e: MPInt::from_bytes(&identity.e)?,
-                        n: MPInt::from_bytes(&identity.n)?,
-                    }),
+                    KeyData::Ecdsa(EcdsaPublicKey::NistP256(
+                        ssh_key::sec1::point::EncodedPoint::from_bytes(Self::point_compression(
+                            identity,
+                        ))?,
+                    )),
                     "tpm_key",
                 )
                 .to_openssh()?,
             );
         }
         Ok(res)
+    }
+
+    fn point_compression(pubkey: &crate::keyman::EcDsaPublicKey) -> Vec<u8> {
+        let padding_x = 32 - pubkey.x.len();
+        let padding_y = 32 - pubkey.y.len();
+        [
+            vec![4],
+            vec![0; padding_x],
+            pubkey.x.clone(),
+            vec![0; padding_y],
+            pubkey.y.clone(),
+        ]
+        .concat()
     }
 }

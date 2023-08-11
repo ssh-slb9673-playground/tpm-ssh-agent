@@ -6,6 +6,7 @@ pub enum Error {
     Tpm(tpm_i2c::Error),
     Json(serde_json::Error),
     SshKey(ssh_key::Error),
+    Sec1(ssh_key::sec1::Error),
     Agent,
 }
 
@@ -23,6 +24,7 @@ error_wrapping_arm!(std::io::Error, Io);
 error_wrapping_arm!(tpm_i2c::Error, Tpm);
 error_wrapping_arm!(serde_json::Error, Json);
 error_wrapping_arm!(ssh_key::Error, SshKey);
+error_wrapping_arm!(ssh_key::sec1::Error, Sec1);
 
 impl From<()> for Error {
     fn from(_: ()) -> Self {
@@ -37,6 +39,7 @@ impl std::fmt::Display for Error {
             Error::Tpm(e) => write!(f, "{}", e),
             Error::Json(e) => write!(f, "{}", e),
             Error::SshKey(e) => write!(f, "{}", e),
+            Error::Sec1(e) => write!(f, "{}", e),
             Error::Agent => write!(f, "AgentError"),
         }
     }

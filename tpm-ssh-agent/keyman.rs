@@ -11,11 +11,17 @@ pub struct RsaPublicKey {
     pub n: Vec<u8>,
 }
 
+#[derive(Debug)]
+pub struct EcDsaPublicKey {
+    pub x: Vec<u8>,
+    pub y: Vec<u8>,
+}
+
 pub struct TpmKeyManager {
     state_file_path: PathBuf,
     tpm: Tpm,
     state: State,
-    pub identities: Vec<RsaPublicKey>,
+    pub identities: Vec<EcDsaPublicKey>,
 }
 
 fn next_nonce() -> [u8; 16] {
@@ -110,7 +116,7 @@ impl TpmKeyManager {
                     },
                 },
                 Tpm2BPublic::new(TpmtPublic {
-                    algorithm_type: TpmiAlgorithmPublic::Rsa,
+                    algorithm_type: TpmiAlgorithmPublic::Ecc,
                     algorithm_name: TpmiAlgorithmHash::Sha256,
                     object_attributes: TpmAttrObject::new()
                         .with_fixed_tpm(true)
@@ -119,24 +125,30 @@ impl TpmKeyManager {
                         .with_sign_or_encrypt(true)
                         .with_user_with_auth(true),
                     auth_policy: Tpm2BDigest::new(&[]),
-                    parameters: TpmuPublicParams::RsaDetail(TpmsRsaParams {
+                    parameters: TpmuPublicParams::EccDetail(TpmsEccParams {
                         symmetric: TpmtSymdefObject {
                             algorithm: TpmiAlgorithmSymObject::Null,
                             key_bits: TpmuSymKeybits::Null,
                             mode: TpmuSymMode::Null,
                         },
-                        scheme: TpmtRsaScheme {
-                            scheme: TpmiAlgorithmRsaScheme::RsaSsa,
+                        scheme: TpmtEccScheme {
+                            scheme: TpmiAlgorithmEccScheme::EcDsa,
                             details: TpmuAsymmetricScheme::Signature(TpmsSignatureScheme::AX(
                                 TpmsSchemeHash {
                                     hash_algorithm: TpmiAlgorithmHash::Sha256,
                                 },
                             )),
                         },
-                        key_bits: 2048,
-                        exponent: 65537,
+                        curve_id: TpmEccCurve::NistP256,
+                        kdf: TpmtKdfScheme {
+                            scheme: TpmiAlgorithmKdf::Null,
+                            details: TpmuKdfScheme::Null,
+                        },
                     }),
-                    unique: TpmuPublicIdentifier::Rsa(Tpm2BDigest::new(&[])),
+                    unique: TpmuPublicIdentifier::Ecc(TpmsEccPoint {
+                        x: Tpm2BDigest::new(&[]),
+                        y: Tpm2BDigest::new(&[]),
+                    }),
                 }),
                 Tpm2BData::new(&[]),
                 TpmlPcrSelection {
@@ -167,7 +179,7 @@ impl TpmKeyManager {
         Ok(())
     }
 
-    pub fn sign(&mut self, msg: &[u8]) -> Result<Vec<u8>> {
+    pub fn sign(&mut self, msg: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
         let digest = TpmiAlgorithmHash::Sha256.digest(msg);
         let sig = self.tpm.sign(
             self.state.primary_handle.unwrap(),
@@ -175,7 +187,7 @@ impl TpmKeyManager {
             "password".as_bytes().to_vec(),
             &digest,
             TpmtSignatureScheme {
-                scheme: TpmiAlgorithmSigScheme::RsaSsa,
+                scheme: TpmiAlgorithmSigScheme::EcDsa,
                 details: TpmsSignatureScheme::AX(TpmsSchemeHash {
                     hash_algorithm: TpmiAlgorithmHash::Sha256,
                 }),
@@ -188,7 +200,7 @@ impl TpmKeyManager {
         )?;
 
         Ok(match sig.details {
-            TpmuSignature::Rsa(x) => x.signature.buffer,
+            TpmuSignature::Ecc(x) => (x.signature_r.buffer, x.signature_s.buffer),
             _ => todo!(),
         })
     }
@@ -196,10 +208,10 @@ impl TpmKeyManager {
     pub fn enumerate_identities(&mut self) -> Result<()> {
         let public_data = self.tpm.read_public(self.state.primary_handle.unwrap())?;
         if let Some(x) = public_data.0.public_area {
-            if let TpmuPublicIdentifier::Rsa(y) = x.unique {
-                self.identities.push(RsaPublicKey {
-                    e: vec![0x01, 0x00, 0x01],
-                    n: [vec![0], y.buffer].concat(),
+            if let TpmuPublicIdentifier::Ecc(y) = x.unique {
+                self.identities.push(EcDsaPublicKey {
+                    x: y.x.buffer,
+                    y: y.y.buffer,
                 });
             }
         }
