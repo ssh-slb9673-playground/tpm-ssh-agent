@@ -4,8 +4,8 @@ use ssh_agent_lib::proto::message::{Identity, Message};
 use ssh_agent_lib::proto::PublicKey::EcDsa;
 use ssh_agent_lib::proto::{EcDsaPublicKey, Signature};
 use ssh_agent_lib::Agent;
-use ssh_key::MPInt;
 use std::sync::{Arc, Mutex};
+use tpm_i2c::tpm::ToTpm;
 
 pub struct TpmSshAgent {
     keyman: Arc<Mutex<TpmKeyManager>>,
@@ -63,14 +63,12 @@ impl TpmSshAgent {
                 let signature = to_bytes(&Signature {
                     algorithm: "ecdsa-sha2-nistp256".to_string(),
                     blob: [
-                        MPInt::from_positive_bytes(&r)
-                            .unwrap()
-                            .as_positive_bytes()
-                            .unwrap(),
-                        MPInt::from_positive_bytes(&s)
-                            .unwrap()
-                            .as_positive_bytes()
-                            .unwrap(),
+                        (r.len() as u32 + 1).to_tpm(),
+                        vec![0],
+                        r,
+                        (s.len() as u32 + 1).to_tpm(),
+                        vec![0],
+                        s,
                     ]
                     .concat(),
                 })?;
