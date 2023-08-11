@@ -2,11 +2,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
-    IoError(std::io::Error),
-    TpmError(tpm_i2c::Error),
-    JsonError(serde_json::Error),
-    SshKeyError(ssh_key::Error),
-    AgentError,
+    Io(std::io::Error),
+    Tpm(tpm_i2c::Error),
+    Json(serde_json::Error),
+    SshKey(ssh_key::Error),
+    Agent,
 }
 
 macro_rules! error_wrapping_arm {
@@ -19,25 +19,25 @@ macro_rules! error_wrapping_arm {
     };
 }
 
-error_wrapping_arm!(std::io::Error, IoError);
-error_wrapping_arm!(tpm_i2c::Error, TpmError);
-error_wrapping_arm!(serde_json::Error, JsonError);
-error_wrapping_arm!(ssh_key::Error, SshKeyError);
+error_wrapping_arm!(std::io::Error, Io);
+error_wrapping_arm!(tpm_i2c::Error, Tpm);
+error_wrapping_arm!(serde_json::Error, Json);
+error_wrapping_arm!(ssh_key::Error, SshKey);
 
 impl From<()> for Error {
     fn from(_: ()) -> Self {
-        Error::AgentError
+        Error::Agent
     }
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match &self {
-            Error::IoError(e) => write!(f, "{}", e),
-            Error::TpmError(e) => write!(f, "{}", e),
-            Error::JsonError(e) => write!(f, "{}", e),
-            Error::SshKeyError(e) => write!(f, "{}", e),
-            Error::AgentError => write!(f, "AgentError"),
+            Error::Io(e) => write!(f, "{}", e),
+            Error::Tpm(e) => write!(f, "{}", e),
+            Error::Json(e) => write!(f, "{}", e),
+            Error::SshKey(e) => write!(f, "{}", e),
+            Error::Agent => write!(f, "AgentError"),
         }
     }
 }
