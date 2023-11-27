@@ -1,3 +1,3 @@
 mod kdf;
 
-pub use kdf::*;
+pub(in crate::tpm) use kdf::*;

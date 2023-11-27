@@ -44,6 +44,18 @@ pub enum TpmiHandleHierarchy {
     Null,
 }
 
+#[derive(Debug, Clone)]
+pub enum TpmiHandleNvAuth {
+    Owner,
+    Platform,
+    NvIndex(TpmHandle),
+}
+
+#[derive(Debug, Clone)]
+pub enum TpmiHandleNvIndex {
+    NvIndex(TpmHandle),
+}
+
 set_tpm_data_codec!(TpmiYesNo, pack_enum_to_u8, unpack_u8_to_enum);
 
 impl From<&TpmiDhObject> for TpmHandle {
@@ -65,6 +77,24 @@ impl From<&TpmiHandleHierarchy> for TpmHandle {
             TpmiHandleHierarchy::Null => TpmPermanentHandle::Null,
         }
         .into()
+    }
+}
+
+impl From<&TpmiHandleNvAuth> for TpmHandle {
+    fn from(other: &TpmiHandleNvAuth) -> TpmHandle {
+        match other {
+            TpmiHandleNvAuth::Owner => TpmPermanentHandle::Owner.into(),
+            TpmiHandleNvAuth::Platform => TpmPermanentHandle::Platform.into(),
+            TpmiHandleNvAuth::NvIndex(index) => *index,
+        }
+    }
+}
+
+impl From<&TpmiHandleNvIndex> for TpmHandle {
+    fn from(other: &TpmiHandleNvIndex) -> TpmHandle {
+        match other {
+            TpmiHandleNvIndex::NvIndex(index) => *index,
+        }
     }
 }
 
@@ -98,6 +128,15 @@ impl_to_tpm! {
     }
 
     TpmiDhObject(self) {
+        let handle: TpmHandle = self.into();
+        handle.to_tpm()
+    }
+
+    TpmiHandleNvAuth(self) {
+        let handle: TpmHandle = self.into();
+        handle.to_tpm()
+    }
+    TpmiHandleNvIndex(self) {
         let handle: TpmHandle = self.into();
         handle.to_tpm()
     }
@@ -162,6 +201,51 @@ impl_from_tpm! {
                 .into());
             },
             v,
+        ))
+    }
+
+    TpmiHandleNvAuth(v) {
+        let (handle, v) = TpmHandle::from_tpm(v)?;
+        Ok((
+            if let Some(t) = TpmPermanentHandle::from_u32(handle) {
+                match t {
+                    TpmPermanentHandle::Owner => TpmiHandleNvAuth::Owner,
+                    TpmPermanentHandle::Platform => TpmiHandleNvAuth::Platform,
+                    x => {
+                        return Err(TpmError::create_parse_error(&format!(
+                            "invalid handle specified: {:?}",
+                            x
+                        )).into())
+                    }
+                }
+            } else if TpmHandleConstants::NvIndexFirst as u32 <= handle
+                && handle <= TpmHandleConstants::NvIndexLast as u32 {
+                TpmiHandleNvAuth::NvIndex(handle)
+            } else {
+                return Err(TpmError::create_parse_error(&format!(
+                    "invalid handle specified: {}",
+                    handle
+                ))
+                .into());
+            }
+        ,v
+        ))
+    }
+
+    TpmiHandleNvIndex(v) {
+        let (handle, v) = TpmHandle::from_tpm(v)?;
+        Ok((
+            if TpmHandleConstants::NvIndexFirst as u32 <= handle
+                && handle <= TpmHandleConstants::NvIndexLast as u32 {
+                TpmiHandleNvIndex::NvIndex(handle)
+            } else {
+                return Err(TpmError::create_parse_error(&format!(
+                    "invalid handle specified: {}",
+                    handle
+                ))
+                .into());
+            }
+        ,v
         ))
     }
 }

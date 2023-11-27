@@ -13,6 +13,10 @@ path = "tpm_i2c/lib.rs"
 name = "tpm-ssh-agent"
 path = "tpm-ssh-agent/main.rs"
 
+[[bin]]
+name = "tpm-attestation"
+path = "tpm-attestation/main.rs"
+
 [features]
 default = ["hidapi"]
 hidapi = ["dep:hidapi"]

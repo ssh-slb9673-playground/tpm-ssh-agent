@@ -34,7 +34,7 @@ impl Tpm {
                 Box::new(validation),
             ],
         );
-        cmd.set_public_object_for_handle(key_handle, public_buf.public_area.unwrap());
+        cmd.set_public_data_for_object_handle(key_handle, public_buf.public_area.unwrap());
         let res = self.execute_with_session(&cmd, 0)?;
 
         if !res.auth_area.is_empty() {

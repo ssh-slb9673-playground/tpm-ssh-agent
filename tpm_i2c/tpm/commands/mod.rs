@@ -1,6 +1,7 @@
 mod capability;
 mod context;
 mod hierarchy;
+mod nv_storage;
 mod object;
 mod random_number_generator;
 mod session;

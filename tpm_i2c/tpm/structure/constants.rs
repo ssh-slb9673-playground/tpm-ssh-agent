@@ -48,6 +48,8 @@ pub enum Tpm2CommandCode {
     FlushContext = 0x00000165,
     Sign = 0x0000015d,
     ReadPublic = 0x00000173,
+    NvRead = 0x0000014E,
+    NvReadPublic = 0x00000169,
 }
 
 // TPM_SU
@@ -92,6 +94,8 @@ pub enum TpmHandleConstants {
     TransientLast = ((TpmHandleType::Transient as u32) << HR_SHIFT) + MAX_LOADED_OBJECTS - 1,
     PersistentFirst = ((TpmHandleType::Persistent as u32) << HR_SHIFT) + MAX_LOADED_OBJECTS - 1,
     PersistentLast = ((TpmHandleType::Persistent as u32) << HR_SHIFT) + 0x00FFFFFF,
+    NvIndexFirst = (TpmHandleType::NvIndex as u32) << HR_SHIFT,
+    NvIndexLast = ((TpmHandleType::NvIndex as u32) << HR_SHIFT) + 0x00FFFFFF,
 }
 
 #[derive(FromPrimitive, ToPrimitive, Debug)]
@@ -106,6 +110,7 @@ pub enum TpmSessionType {
 pub const MAX_LOADED_OBJECTS: u32 = 3;
 pub const MAX_ACTIVE_SESSIONS: u32 = 64;
 pub const MAX_SESSION_NUM: u32 = 3;
+pub const NV_BUFFER_MAX: u16 = 768;
 
 #[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
 #[repr(u32)]

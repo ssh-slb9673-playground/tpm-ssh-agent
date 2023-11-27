@@ -1,7 +1,7 @@
-use crate::tpm::crypto::get_name_of_handle;
+use crate::tpm::crypto::{get_name_of_handle, PublicData};
 use crate::tpm::session::TpmSession;
 use crate::tpm::structure::{
-    Tpm2CommandCode, TpmHandle, TpmStructureTag, TpmiAlgorithmHash, TpmtPublic,
+    Tpm2CommandCode, TpmHandle, TpmStructureTag, TpmiAlgorithmHash, TpmsNvPublic, TpmtPublic,
 };
 use crate::tpm::{ToTpm, TpmDataVec};
 use crate::util::p32be;
@@ -15,7 +15,7 @@ pub struct Tpm2Command {
     pub auth_area: Vec<TpmSession>,
     pub params: Vec<Box<dyn ToTpm>>,
     pub auth_value: Vec<u8>,
-    handle_public_map: HashMap<TpmHandle, TpmtPublic>,
+    handle_public_map: HashMap<TpmHandle, PublicData>,
 }
 
 impl Tpm2Command {
@@ -54,8 +54,16 @@ impl Tpm2Command {
         }
     }
 
-    pub fn set_public_object_for_handle(&mut self, handle: TpmHandle, public: TpmtPublic) {
-        let _ = self.handle_public_map.insert(handle, public);
+    pub fn set_public_data_for_object_handle(&mut self, handle: TpmHandle, public: TpmtPublic) {
+        let _ = self
+            .handle_public_map
+            .insert(handle, PublicData::Object(public));
+    }
+
+    pub fn set_public_data_for_nv_index(&mut self, nv_index: TpmHandle, public: TpmsNvPublic) {
+        let _ = self
+            .handle_public_map
+            .insert(nv_index, PublicData::NvIndex(public));
     }
 
     pub fn cphash(&self, algorithm: TpmiAlgorithmHash) -> Vec<u8> {

@@ -158,6 +158,7 @@ impl_from_tpm_with_selector! {
                 (TpmuCapabilities::Handles(list), v)
             },
             _ => {
+                dbg!(&v);
                 return Err(TpmError::create_parse_error(
                     &format!("invalid value specified: {:?}", selector)
                 ).into());

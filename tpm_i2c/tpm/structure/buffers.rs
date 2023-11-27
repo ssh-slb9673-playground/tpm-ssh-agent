@@ -45,3 +45,4 @@ pub type Tpm2BPrivateKeyRsa = Tpm2BDigest;
 pub type Tpm2BEccParameter = Tpm2BDigest;
 pub type Tpm2BData = Tpm2BDigest;
 pub type Tpm2BName = Tpm2BDigest;
+pub type Tpm2BMaxNvBuffer = Tpm2BDigest;

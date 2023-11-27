@@ -1,5 +1,27 @@
-use crate::tpm::structure::{TpmHandle, TpmiAlgorithmHash, TpmtPublic};
+use crate::tpm::structure::{TpmHandle, TpmiAlgorithmHash, TpmsNvPublic, TpmtPublic};
 use crate::tpm::ToTpm;
+
+#[derive(Debug)]
+pub(in crate::tpm) enum PublicData {
+    Object(TpmtPublic),
+    NvIndex(TpmsNvPublic),
+}
+
+impl PublicData {
+    fn get_algorithm_name(&self) -> TpmiAlgorithmHash {
+        match self {
+            PublicData::Object(public) => public.algorithm_name,
+            PublicData::NvIndex(public) => public.algorithm_name,
+        }
+    }
+
+    fn get_contents(&self) -> Vec<u8> {
+        match self {
+            PublicData::Object(public) => public.to_tpm(),
+            PublicData::NvIndex(public) => public.to_tpm(),
+        }
+    }
+}
 
 fn key_iteration(
     algorithm_hash: &TpmiAlgorithmHash,
@@ -27,7 +49,7 @@ fn key_iteration(
     )
 }
 
-pub fn kdf_a(
+pub(in crate::tpm) fn kdf_a(
     algorithm_hash: &TpmiAlgorithmHash,
     secret_key: &[u8],
     label: &[u8],
@@ -54,9 +76,9 @@ pub fn kdf_a(
     res.concat()[0..target_len].to_vec()
 }
 
-pub fn get_name_of_handle<'a, F>(handle: TpmHandle, handle_to_public: F) -> Vec<u8>
+pub(in crate::tpm) fn get_name_of_handle<'a, F>(handle: TpmHandle, handle_to_public: F) -> Vec<u8>
 where
-    F: Fn(TpmHandle) -> &'a TpmtPublic,
+    F: Fn(TpmHandle) -> &'a PublicData,
 {
     // [TCG TPM Specification Part 1] Section 16 "Names" and Table 3
     let v = handle.to_tpm();
@@ -64,14 +86,14 @@ where
     if mso == 0x00u8 || mso == 0x02u8 || mso == 0x03u8 || mso == 0x40 {
         // PCR, HMAC Session, Policy Session, Permanent Values
         v
-    } else if mso == 0x01u8 {
+    } else if mso == 0x01u8 // NV Index
+           || mso == 0x80u8 || mso == 0x81
+    // Transient / Persistent Objects
+    {
         // Nv Index
-        todo!();
-    } else if mso == 0x80u8 || mso == 0x81 {
-        // Transient / Persistent Objects
         let public = handle_to_public(handle);
-        let hash = public.algorithm_name;
-        [hash.to_tpm(), hash.digest(&public.to_tpm())]
+        let hash = public.get_algorithm_name();
+        [hash.to_tpm(), hash.digest(&public.get_contents())]
             .concat()
             .to_vec()
     } else {

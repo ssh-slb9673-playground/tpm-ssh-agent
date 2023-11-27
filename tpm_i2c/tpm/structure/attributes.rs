@@ -68,6 +68,37 @@ pub struct TpmAttrObject {
     _reserved_5: u16,
 }
 
+#[bitfield(u32)]
+pub struct TpmAttrNv {
+    pub nv_platform_write: bool,
+    pub nv_owner_write: bool,
+    pub nv_auth_write: bool,
+    pub nv_policy_write: bool,
+    #[bits(4)]
+    pub nv_index_type: u8,
+    #[bits(2)]
+    _reserved_1: u8,
+    pub nv_policy_delete: bool,
+    pub nv_write_locked: bool,
+    pub nv_write_all: bool,
+    pub nv_write_define: bool,
+    pub nv_write_stclear: bool,
+    pub nv_global_lock: bool,
+    pub nv_platform_read: bool,
+    pub nv_owner_read: bool,
+    pub nv_auth_read: bool,
+    pub nv_policy_read: bool,
+    #[bits(5)]
+    _reserved_2: u8,
+    pub nv_no_da: bool,
+    pub nv_orderly: bool,
+    pub nv_clear_stclear: bool,
+    pub nv_read_locked: bool,
+    pub nv_written: bool,
+    pub nv_platform_create: bool,
+    pub nv_read_stclear: bool,
+}
+
 impl_to_tpm! {
     TpmAttrLocality(self) {
         vec![self.0]
@@ -82,6 +113,10 @@ impl_to_tpm! {
     }
 
     TpmAttrObject(self) {
+        p32be(self.0).to_vec()
+    }
+
+    TpmAttrNv(self) {
         p32be(self.0).to_vec()
     }
 }
@@ -116,6 +151,14 @@ impl_from_tpm! {
             Err(TpmError::create_parse_error("length mismatch").into())
         } else {
             Ok((TpmAttrObject::from(u32be(&v[0..4])), &v[4..]))
+        }
+    }
+
+    TpmAttrNv(v) {
+        if v.is_empty() {
+            Err(TpmError::create_parse_error("length mismatch").into())
+        } else {
+            Ok((TpmAttrNv::from(u32be(&v[0..4])), &v[4..]))
         }
     }
 }
