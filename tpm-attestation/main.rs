@@ -2,6 +2,7 @@
 mod driver;
 mod error;
 use rand::prelude::*;
+use tpm_i2c::tpm::commands::*;
 use tpm_i2c::tpm::session::TpmSession;
 use tpm_i2c::tpm::structure::*;
 use tpm_i2c::tpm::Tpm;
@@ -27,9 +28,10 @@ fn main() -> Result<()> {
     remove_handles(&mut tpm, TpmHandleType::Transient)?;
 
     tpm.print_info()?;
-    let session = open_session(&mut tpm)?;
+    let mut session = open_session(&mut tpm)?;
     println!("Session Opened: {:08x}", session.handle);
 
+    println!("[+] NV indexes:");
     if let TpmuCapabilities::Handles(nv) = tpm
         .get_capability(
             TpmCapabilities::Handles,
@@ -40,12 +42,16 @@ fn main() -> Result<()> {
         .data
     {
         for handle in &nv.handle {
-            println!("[+] 0x{:08x}", handle);
+            println!("  - 0x{:08x}", handle);
         }
     }
 
-    let (data, session) = nv_read(&mut tpm, session, 0x01c00016)?;
-    println!("{:?}", data);
+    let _endorsement_key = create_endorsement_key(&mut tpm, &mut session)?;
+    let _attestation_key = create_signing_key("password".as_bytes(), &mut tpm, &mut session)?;
+
+    dbg!(&_attestation_key);
+
+    let _ek_certificate = nv_read(&mut tpm, &mut session, 0x01c0000a)?;
 
     tpm.flush_context(session.handle)?;
     tpm.shutdown(false)?;
@@ -53,19 +59,15 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn nv_read(
-    tpm: &mut Tpm,
-    session: TpmSession,
-    nv_index: TpmHandle,
-) -> Result<(Vec<u8>, TpmSession)> {
+fn nv_read(tpm: &mut Tpm, session: &mut TpmSession, nv_index: TpmHandle) -> Result<Vec<u8>> {
     let res = tpm.nv_read_public(&TpmiHandleNvIndex::NvIndex(nv_index))?;
-    let mut new_session = session.clone();
+    dbg!(&res.0.nv_public.as_ref().unwrap());
     let mut size = res.0.nv_public.unwrap().data_size;
     let mut res = vec![];
 
     loop {
         let data = tpm.nv_read(
-            &mut new_session,
+            session,
             vec![],
             &TpmiHandleNvAuth::Owner,
             &TpmiHandleNvIndex::NvIndex(nv_index),
@@ -78,7 +80,7 @@ fn nv_read(
         }
         size -= NV_BUFFER_MAX;
     }
-    Ok((res, new_session))
+    Ok(res)
 }
 
 fn remove_handles(tpm: &mut Tpm, ht: TpmHandleType) -> Result<()> {
@@ -96,44 +98,39 @@ fn remove_handles(tpm: &mut Tpm, ht: TpmHandleType) -> Result<()> {
     Ok(())
 }
 
-fn create_primary_key(
+fn create_endorsement_key(
     tpm: &mut Tpm,
-    auth_value: &[u8],
     session: &mut TpmSession,
 ) -> Result<tpm_i2c::tpm::commands::Tpm2CreatePrimaryResponse> {
-    tpm.create_primary(
-        TpmPermanentHandle::Owner.into(),
+    create_primary(
+        TpmiHandleHierarchy::Endorsement,
+        &[],
+        tpm,
         session,
-        vec![],
-        Tpm2BSensitiveCreate {
-            sensitive: TpmsSensitiveCreate {
-                user_auth: Tpm2BAuth::new(auth_value),
-                data: Tpm2BSensitiveData::new(&[]),
-            },
-        },
         Tpm2BPublic::new(TpmtPublic {
+            // [TCG EK Credential Profile v2.5r2] p.39 Table 3: Default EK Template (TPMT_PUBLIC) L-2: ECC NIST P256 (Storage)
             algorithm_type: TpmiAlgorithmPublic::Ecc,
             algorithm_name: TpmiAlgorithmHash::Sha256,
             object_attributes: TpmAttrObject::new()
                 .with_fixed_tpm(true)
                 .with_fixed_parent(true)
                 .with_sensitive_data_origin(true)
-                .with_sign_or_encrypt(true)
-                .with_user_with_auth(true),
-            auth_policy: Tpm2BDigest::new(&[]),
+                .with_admin_with_policy(true)
+                .with_restricted(true)
+                .with_decrypt(true),
+            auth_policy: Tpm2BDigest::new(&[
+                131, 113, 151, 103, 68, 132, 179, 248, 26, 144, 204, 141, 70, 165, 215, 36, 253,
+                82, 215, 110, 6, 82, 11, 100, 242, 161, 218, 27, 51, 20, 105, 170,
+            ]), // TPM2_PolicySecret(TPM_RH_ENDORSEMENT)
             parameters: TpmuPublicParams::EccDetail(TpmsEccParams {
                 symmetric: TpmtSymdefObject {
-                    algorithm: TpmiAlgorithmSymObject::Null,
-                    key_bits: TpmuSymKeybits::Null,
-                    mode: TpmuSymMode::Null,
+                    algorithm: TpmiAlgorithmSymObject::Aes,
+                    key_bits: TpmuSymKeybits::SymmetricAlgo(128),
+                    mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
                 },
                 scheme: TpmtEccScheme {
-                    scheme: TpmiAlgorithmEccScheme::EcDsa,
-                    details: TpmuAsymmetricScheme::Signature(TpmsSignatureScheme::AX(
-                        TpmsSchemeHash {
-                            hash_algorithm: TpmiAlgorithmHash::Sha256,
-                        },
-                    )),
+                    scheme: TpmiAlgorithmEccScheme::Null,
+                    details: TpmuAsymmetricScheme::Null,
                 },
                 curve_id: TpmEccCurve::NistP256,
                 kdf: TpmtKdfScheme {
@@ -142,13 +139,109 @@ fn create_primary_key(
                 },
             }),
             unique: TpmuPublicIdentifier::Ecc(TpmsEccPoint {
-                x: Tpm2BDigest::new(&[]),
-                y: Tpm2BDigest::new(&[]),
+                x: Tpm2BDigest::new(&[0; 32]),
+                y: Tpm2BDigest::new(&[0; 32]),
             }),
         }),
-        Tpm2BData::new(&[]),
-        TpmlPcrSelection {
-            pcr_selections: vec![],
+    )
+}
+
+fn create_signing_key(
+    auth_value: &[u8],
+    tpm: &mut Tpm,
+    session: &mut TpmSession,
+) -> Result<tpm_i2c::tpm::commands::Tpm2CreatePrimaryResponse> {
+    create_primary(
+        TpmiHandleHierarchy::Owner,
+        auth_value,
+        tpm,
+        session,
+        Tpm2BPublic::new(TpmtPublic {
+            algorithm_type: TpmiAlgorithmPublic::Ecc,
+            algorithm_name: TpmiAlgorithmHash::Sha256,
+            object_attributes: TpmAttrObject::new()
+                .with_fixed_tpm(true)
+                .with_fixed_parent(true)
+                .with_sensitive_data_origin(true)
+                .with_user_with_auth(true)
+                .with_decrypt(true)
+                .with_sign_or_encrypt(true),
+            auth_policy: Tpm2BDigest::new(&[]),
+            parameters: TpmuPublicParams::EccDetail(TpmsEccParams {
+                symmetric: TpmtSymdefObject {
+                    algorithm: TpmiAlgorithmSymObject::Aes,
+                    key_bits: TpmuSymKeybits::SymmetricAlgo(128),
+                    mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
+                },
+                scheme: TpmtEccScheme {
+                    scheme: TpmiAlgorithmEccScheme::Null,
+                    details: TpmuAsymmetricScheme::Null,
+                },
+                curve_id: TpmEccCurve::NistP256,
+                kdf: TpmtKdfScheme {
+                    scheme: TpmiAlgorithmKdf::Null,
+                    details: TpmuKdfScheme::Null,
+                },
+            }),
+            unique: TpmuPublicIdentifier::Ecc(TpmsEccPoint {
+                x: Tpm2BDigest::new(&[0; 32]),
+                y: Tpm2BDigest::new(&[0; 32]),
+            }),
+        }),
+    )
+}
+
+fn create_primary(
+    primary_handle: TpmiHandleHierarchy,
+    auth_value: &[u8],
+    tpm: &mut Tpm,
+    session: &mut TpmSession,
+    public_area: Tpm2BPublic,
+) -> Result<tpm_i2c::tpm::commands::Tpm2CreatePrimaryResponse> {
+    tpm.create_primary(
+        primary_handle as TpmHandle,
+        session,
+        vec![],
+        Tpm2CreateParameters {
+            in_sensitive: Tpm2BSensitiveCreate {
+                sensitive: TpmsSensitiveCreate {
+                    user_auth: Tpm2BAuth::new(auth_value),
+                    data: Tpm2BSensitiveData::new(&[]),
+                },
+            },
+            in_public: public_area,
+            outside_info: Tpm2BData::new(&[]),
+            creation_pcr: TpmlPcrSelection {
+                pcr_selections: vec![],
+            },
+        },
+    )
+    .map_err(|err| err.into())
+}
+
+fn create(
+    parent_handle: TpmHandle,
+    auth_value: &[u8],
+    tpm: &mut Tpm,
+    session: &mut TpmSession,
+    public_area: Tpm2BPublic,
+) -> Result<tpm_i2c::tpm::commands::Tpm2CreateResponse> {
+    tpm.create(
+        parent_handle,
+        session,
+        vec![],
+        Tpm2CreateParameters {
+            in_sensitive: Tpm2BSensitiveCreate {
+                sensitive: TpmsSensitiveCreate {
+                    user_auth: Tpm2BAuth::new(auth_value),
+                    data: Tpm2BSensitiveData::new(&[]),
+                },
+            },
+            in_public: public_area,
+            outside_info: Tpm2BData::new(&[]),
+            creation_pcr: TpmlPcrSelection {
+                pcr_selections: vec![],
+            },
         },
     )
     .map_err(|err| err.into())

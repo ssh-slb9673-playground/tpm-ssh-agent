@@ -2,6 +2,7 @@ use crate::state::State;
 use crate::Result;
 use rand::prelude::*;
 use std::path::PathBuf;
+use tpm_i2c::tpm::commands::Tpm2CreateParameters;
 use tpm_i2c::tpm::structure::*;
 use tpm_i2c::tpm::{I2CTpmAccessor, Tpm};
 
@@ -109,50 +110,52 @@ impl TpmKeyManager {
                 TpmPermanentHandle::Owner.into(),
                 self.state.session.as_mut().unwrap(),
                 vec![],
-                Tpm2BSensitiveCreate {
-                    sensitive: TpmsSensitiveCreate {
-                        user_auth: Tpm2BAuth::new(auth_value),
-                        data: Tpm2BSensitiveData::new(&[]),
+                Tpm2CreateParameters {
+                    in_sensitive: Tpm2BSensitiveCreate {
+                        sensitive: TpmsSensitiveCreate {
+                            user_auth: Tpm2BAuth::new(auth_value),
+                            data: Tpm2BSensitiveData::new(&[]),
+                        },
                     },
-                },
-                Tpm2BPublic::new(TpmtPublic {
-                    algorithm_type: TpmiAlgorithmPublic::Ecc,
-                    algorithm_name: TpmiAlgorithmHash::Sha256,
-                    object_attributes: TpmAttrObject::new()
-                        .with_fixed_tpm(true)
-                        .with_fixed_parent(true)
-                        .with_sensitive_data_origin(true)
-                        .with_sign_or_encrypt(true)
-                        .with_user_with_auth(true),
-                    auth_policy: Tpm2BDigest::new(&[]),
-                    parameters: TpmuPublicParams::EccDetail(TpmsEccParams {
-                        symmetric: TpmtSymdefObject {
-                            algorithm: TpmiAlgorithmSymObject::Null,
-                            key_bits: TpmuSymKeybits::Null,
-                            mode: TpmuSymMode::Null,
-                        },
-                        scheme: TpmtEccScheme {
-                            scheme: TpmiAlgorithmEccScheme::EcDsa,
-                            details: TpmuAsymmetricScheme::Signature(TpmsSignatureScheme::AX(
-                                TpmsSchemeHash {
-                                    hash_algorithm: TpmiAlgorithmHash::Sha256,
-                                },
-                            )),
-                        },
-                        curve_id: TpmEccCurve::NistP256,
-                        kdf: TpmtKdfScheme {
-                            scheme: TpmiAlgorithmKdf::Null,
-                            details: TpmuKdfScheme::Null,
-                        },
+                    in_public: Tpm2BPublic::new(TpmtPublic {
+                        algorithm_type: TpmiAlgorithmPublic::Ecc,
+                        algorithm_name: TpmiAlgorithmHash::Sha256,
+                        object_attributes: TpmAttrObject::new()
+                            .with_fixed_tpm(true)
+                            .with_fixed_parent(true)
+                            .with_sensitive_data_origin(true)
+                            .with_sign_or_encrypt(true)
+                            .with_user_with_auth(true),
+                        auth_policy: Tpm2BDigest::new(&[]),
+                        parameters: TpmuPublicParams::EccDetail(TpmsEccParams {
+                            symmetric: TpmtSymdefObject {
+                                algorithm: TpmiAlgorithmSymObject::Null,
+                                key_bits: TpmuSymKeybits::Null,
+                                mode: TpmuSymMode::Null,
+                            },
+                            scheme: TpmtEccScheme {
+                                scheme: TpmiAlgorithmEccScheme::EcDsa,
+                                details: TpmuAsymmetricScheme::Signature(TpmsSignatureScheme::AX(
+                                    TpmsSchemeHash {
+                                        hash_algorithm: TpmiAlgorithmHash::Sha256,
+                                    },
+                                )),
+                            },
+                            curve_id: TpmEccCurve::NistP256,
+                            kdf: TpmtKdfScheme {
+                                scheme: TpmiAlgorithmKdf::Null,
+                                details: TpmuKdfScheme::Null,
+                            },
+                        }),
+                        unique: TpmuPublicIdentifier::Ecc(TpmsEccPoint {
+                            x: Tpm2BDigest::new(&[]),
+                            y: Tpm2BDigest::new(&[]),
+                        }),
                     }),
-                    unique: TpmuPublicIdentifier::Ecc(TpmsEccPoint {
-                        x: Tpm2BDigest::new(&[]),
-                        y: Tpm2BDigest::new(&[]),
-                    }),
-                }),
-                Tpm2BData::new(&[]),
-                TpmlPcrSelection {
-                    pcr_selections: vec![],
+                    outside_info: Tpm2BData::new(&[]),
+                    creation_pcr: TpmlPcrSelection {
+                        pcr_selections: vec![],
+                    },
                 },
             )
             .map_err(|err| err.into())

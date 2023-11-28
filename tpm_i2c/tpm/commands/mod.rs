@@ -10,3 +10,4 @@ mod startup;
 mod testing;
 
 pub use hierarchy::Tpm2CreatePrimaryResponse;
+pub use object::{Tpm2CreateParameters, Tpm2CreateResponse};

@@ -1,11 +1,11 @@
+use crate::tpm::commands::Tpm2CreateParameters;
 /**
     Ref. [TCG TPM 2.0 Library Part3] Section 24. "Hierarchy Commands"
 */
 use crate::tpm::session::TpmSession;
 use crate::tpm::structure::{
-    Tpm2BCreationData, Tpm2BData, Tpm2BDigest, Tpm2BName, Tpm2BPublic, Tpm2BSensitiveCreate,
-    Tpm2Command, Tpm2CommandCode, TpmHandle, TpmResponseCode, TpmStructureTag, TpmlPcrSelection,
-    TpmtTicketCreation,
+    Tpm2BCreationData, Tpm2BDigest, Tpm2BName, Tpm2BPublic, Tpm2Command, Tpm2CommandCode,
+    TpmHandle, TpmResponseCode, TpmStructureTag, TpmtTicketCreation,
 };
 use crate::tpm::{FromTpm, Tpm, TpmError};
 use crate::TpmResult;
@@ -16,10 +16,7 @@ impl Tpm {
         primary_handle: TpmHandle,
         auth_area: &mut TpmSession,
         auth_value: Vec<u8>,
-        in_sensitive: Tpm2BSensitiveCreate,
-        in_public: Tpm2BPublic,
-        outside_info: Tpm2BData,
-        creation_pcr: TpmlPcrSelection,
+        params: Tpm2CreateParameters,
     ) -> TpmResult<Tpm2CreatePrimaryResponse> {
         auth_area.refresh_nonce();
         let res = self.execute_with_session(
@@ -30,10 +27,10 @@ impl Tpm {
                 vec![auth_area.clone()],
                 auth_value.clone(),
                 vec![
-                    Box::new(in_sensitive),
-                    Box::new(in_public),
-                    Box::new(outside_info),
-                    Box::new(creation_pcr),
+                    Box::new(params.in_sensitive),
+                    Box::new(params.in_public),
+                    Box::new(params.outside_info),
+                    Box::new(params.creation_pcr),
                 ],
             ),
             1,

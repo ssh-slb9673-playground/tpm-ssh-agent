@@ -1,9 +1,11 @@
+use crate::tpm::session::TpmSession;
 /**
     Ref. [TCG TPM 2.0 Library Part3] Section 12. "Object Commands"
 */
 use crate::tpm::structure::{
-    Tpm2BName, Tpm2BPublic, Tpm2Command, Tpm2CommandCode, TpmHandle, TpmResponseCode,
-    TpmStructureTag,
+    Tpm2BCreationData, Tpm2BData, Tpm2BDigest, Tpm2BName, Tpm2BPrivate, Tpm2BPublic,
+    Tpm2BSensitiveCreate, Tpm2Command, Tpm2CommandCode, TpmHandle, TpmResponseCode,
+    TpmStructureTag, TpmlPcrSelection, TpmtTicketCreation,
 };
 use crate::tpm::{FromTpm, Tpm, TpmError};
 use crate::TpmResult;
@@ -28,4 +30,77 @@ impl Tpm {
             Ok((out_public, name, qualified_name))
         }
     }
+
+    pub fn create(
+        &mut self,
+        parent_handle: TpmHandle,
+        auth_area: &mut TpmSession,
+        auth_value: Vec<u8>,
+        params: Tpm2CreateParameters,
+    ) -> TpmResult<Tpm2CreateResponse> {
+        auth_area.refresh_nonce();
+        let res = self.execute_with_session(
+            &Tpm2Command::new_with_session(
+                TpmStructureTag::Sessions,
+                Tpm2CommandCode::Create,
+                vec![parent_handle],
+                vec![auth_area.clone()],
+                auth_value.clone(),
+                vec![
+                    Box::new(params.in_sensitive),
+                    Box::new(params.in_public),
+                    Box::new(params.outside_info),
+                    Box::new(params.creation_pcr),
+                ],
+            ),
+            1,
+        )?;
+
+        if !res.auth_area.is_empty() {
+            auth_area.set_tpm_nonce(res.auth_area[0].nonce.buffer.clone());
+            assert!(auth_area.validate(&res, auth_value.clone(), &res.auth_area[0].hmac.buffer));
+        }
+
+        if res.response_code != TpmResponseCode::Success {
+            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
+        } else {
+            let v = &res.params;
+            let (out_private, v) = Tpm2BPrivate::from_tpm(v)?;
+            let (out_public, v) = Tpm2BPublic::from_tpm(v)?;
+            let (creation_data, v) = Tpm2BCreationData::from_tpm(v)?;
+            let (creation_hash, v) = Tpm2BDigest::from_tpm(v)?;
+            let (creation_ticket, v) = TpmtTicketCreation::from_tpm(v)?;
+            let (name, v) = Tpm2BName::from_tpm(v)?;
+            assert!(v.is_empty());
+
+            Ok(Tpm2CreateResponse {
+                handle: res.handles[0],
+                out_private,
+                out_public,
+                creation_data,
+                creation_hash,
+                creation_ticket,
+                name,
+            })
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Tpm2CreateResponse {
+    pub handle: TpmHandle,
+    pub out_public: Tpm2BPublic,
+    pub out_private: Tpm2BPrivate,
+    pub creation_data: Tpm2BCreationData,
+    pub creation_hash: Tpm2BDigest,
+    pub creation_ticket: TpmtTicketCreation,
+    pub name: Tpm2BName,
+}
+
+#[derive(Debug)]
+pub struct Tpm2CreateParameters {
+    pub in_sensitive: Tpm2BSensitiveCreate,
+    pub in_public: Tpm2BPublic,
+    pub outside_info: Tpm2BData,
+    pub creation_pcr: TpmlPcrSelection,
 }
