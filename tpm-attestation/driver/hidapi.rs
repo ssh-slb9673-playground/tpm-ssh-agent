@@ -127,6 +127,7 @@ impl I2CTpmAccessor for MCP2221A {
         let mut offset = 0;
         self.wait_busy()?;
         let mut retry = 0;
+        let retry_max = (size * 5 / 60).max(5);
         while offset < size {
             let write_size = (size - offset).min(60);
             let cmd = 0x90;
@@ -149,7 +150,7 @@ impl I2CTpmAccessor for MCP2221A {
             // read_buf[1] == 1 <=> "I2C engine is busy (command not completed)."
             if read_buf[1] == 1 {
                 retry += 1;
-                if retry > 5 {
+                if retry > 20 {
                     self.setup_i2c()?;
                     return Err(Error::Hardware);
                 }
