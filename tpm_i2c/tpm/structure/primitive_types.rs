@@ -49,7 +49,7 @@ impl_from_tpm! {
 define_tpm_codec!(u16, p16be, u16be, 2);
 define_tpm_codec!(u32, p32be, u32be, 4);
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TpmsEmpty;
 
 impl TpmsEmpty {

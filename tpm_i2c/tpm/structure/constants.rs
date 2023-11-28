@@ -51,6 +51,7 @@ pub enum Tpm2CommandCode {
     NvRead = 0x0000014E,
     NvReadPublic = 0x00000169,
     Create = 0x00000153,
+    Load = 0x00000157,
 }
 
 // TPM_SU
@@ -129,7 +130,7 @@ pub enum TpmCapabilities {
     Act = 10,
 }
 
-#[derive(FromPrimitive, ToPrimitive, Debug)]
+#[derive(FromPrimitive, ToPrimitive, Debug, Clone)]
 #[repr(u16)]
 pub enum TpmEccCurve {
     EccNone = 0x00,

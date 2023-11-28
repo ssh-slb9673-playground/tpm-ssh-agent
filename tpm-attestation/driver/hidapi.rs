@@ -30,7 +30,7 @@ impl MCP2221A {
                 break;
             }
             sleep(Duration::from_millis(50));
-            if count < 1000 {
+            if count > 1000 {
                 return Err(Error::Hardware);
             }
             count += 1;
@@ -150,7 +150,7 @@ impl I2CTpmAccessor for MCP2221A {
             // read_buf[1] == 1 <=> "I2C engine is busy (command not completed)."
             if read_buf[1] == 1 {
                 retry += 1;
-                if retry > retry_max {
+                if retry >= retry_max {
                     self.setup_i2c()?;
                     return Err(Error::Hardware);
                 }

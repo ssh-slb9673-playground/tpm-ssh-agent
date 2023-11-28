@@ -10,12 +10,12 @@ use crate::util::{p16be, u16be};
 use crate::TpmResult;
 use std::collections::HashSet;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tpm2BPublic {
     pub public_area: Option<TpmtPublic>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmtPublic {
     pub algorithm_type: TpmiAlgorithmPublic,
     pub algorithm_name: TpmiAlgorithmHash,
@@ -25,7 +25,7 @@ pub struct TpmtPublic {
     pub unique: TpmuPublicIdentifier,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TpmuPublicParams {
     // keydeHashDetail
     SymDetail(TpmsSymcipherParams),
@@ -33,7 +33,7 @@ pub enum TpmuPublicParams {
     EccDetail(TpmsEccParams),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmsEccParams {
     pub symmetric: TpmtSymdefObject,
     pub scheme: TpmtEccScheme,
@@ -41,13 +41,13 @@ pub struct TpmsEccParams {
     pub kdf: TpmtKdfScheme,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmtPublicParams {
     pub algorithm_type: TpmiAlgorithmPublic,
     pub parameters: TpmuPublicParams,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TpmuPublicIdentifier {
     Sym(Tpm2BDigest),
     Rsa(Tpm2BPublicKeyRsa),
@@ -57,13 +57,13 @@ pub enum TpmuPublicIdentifier {
     // Derive(TpmsDerive),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmsAsymmetricParams {
     pub symmetric: TpmtSymdefObject,
     pub scheme: TpmtAsymmetricScheme,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmsRsaParams {
     pub symmetric: TpmtSymdefObject,
     pub scheme: TpmtRsaScheme,
@@ -71,20 +71,20 @@ pub struct TpmsRsaParams {
     pub exponent: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmtAsymmetricScheme {
     pub scheme: TpmiAlgorithmAsymmetricScheme,
     pub details: TpmuAsymmetricScheme,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmsSchemeHash {
     pub hash_algorithm: TpmiAlgorithmHash,
 }
 
 pub type TpmsKeyScheme = TpmsSchemeHash;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TpmuAsymmetricScheme {
     Kdf(TpmsKeyScheme),
     Signature(TpmsSignatureScheme),
@@ -93,13 +93,13 @@ pub enum TpmuAsymmetricScheme {
     Null,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TpmsEncryptionScheme {
     AEH(TpmsSchemeHash),
     AE(TpmsEmpty),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TpmsSignatureScheme {
     AX(TpmsSchemeHash),
     // AXN(TpmsSchemeEcdaa),

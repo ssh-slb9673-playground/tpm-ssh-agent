@@ -9,17 +9,17 @@ use std::collections::HashSet;
 
 pub type TpmsSchemeHmac = TpmsSchemeHash;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tpm2BSensitiveCreate {
     pub sensitive: TpmsSensitiveCreate,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmsSymcipherParams {
     pub sym: TpmtSymdefObject,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmtSymdefObject {
     pub algorithm: TpmiAlgorithmSymObject,
     pub key_bits: TpmuSymKeybits,
@@ -27,7 +27,7 @@ pub struct TpmtSymdefObject {
     // details: TpmuSymDetails, <- we must omit this; see [TPM 2.0 Library Part 2, Section 11.1.6] Table 140
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmtSymdef {
     pub algorithm: TpmiAlgorithmSymmetric,
     pub key_bits: TpmuSymKeybits,
@@ -35,28 +35,28 @@ pub struct TpmtSymdef {
     // details: TpmuSymDetails, <- we must omit this; see [TPM 2.0 Library Part 2, Section 11.1.6] Table 140
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TpmuSymKeybits {
     SymmetricAlgo(TpmKeyBits),
     Xor(TpmiAlgorithmHash),
     Null,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TpmuSymMode {
     SymmetricAlgo(TpmiAlgorithmSymMode),
     Xor,
     Null,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TpmuSymDetails {
     SymmetricAlgo(TpmiAlgorithmSymmetric),
     Xor,
     Null,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmsSensitiveCreate {
     pub user_auth: Tpm2BAuth,
     pub data: Tpm2BSensitiveData,

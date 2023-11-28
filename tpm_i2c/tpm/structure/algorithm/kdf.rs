@@ -3,13 +3,13 @@ use crate::tpm::structure::{TpmAlgorithm, TpmAlgorithmType, TpmiAlgorithmHash, T
 use crate::tpm::{FromTpm, FromTpmWithSelector, ToTpm, TpmResult};
 use std::collections::HashSet;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmtKdfScheme {
     pub scheme: TpmiAlgorithmKdf,
     pub details: TpmuKdfScheme,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TpmuKdfScheme {
     HM(TpmiAlgorithmHash),
     Null,

@@ -52,14 +52,22 @@ fn main() -> Result<()> {
 
     println!("Generate: AK");
     session.set_entity_auth_value("srk_authvalue".as_bytes());
-    let main_key = create_attestation_key(
+    let attestation_key = create_attestation_key(
         storage_root_key.handle,
         "attestation_key_authvalue".as_bytes(),
         &mut tpm,
         &mut session,
     )?;
 
-    dbg!(&main_key);
+    let (ak_handle, ak_name) = tpm.load(
+        storage_root_key.handle,
+        &mut session,
+        attestation_key.out_private.clone(),
+        attestation_key.out_public.clone(),
+    )?;
+
+    println!("ak_handle: {:08x}", ak_handle);
+    println!("ak_name: {:?}", ak_name);
 
     println!("Generate: EK");
     session.set_entity_auth_value(&[]);

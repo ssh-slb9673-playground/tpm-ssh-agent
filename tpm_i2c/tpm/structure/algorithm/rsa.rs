@@ -5,7 +5,7 @@ use crate::tpm::structure::{
 use crate::tpm::{FromTpm, FromTpmWithSelector, ToTpm};
 use crate::TpmResult;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmtRsaScheme {
     pub scheme: TpmiAlgorithmRsaScheme,
     pub details: TpmuAsymmetricScheme,

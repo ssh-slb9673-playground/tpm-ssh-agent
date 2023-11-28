@@ -5,13 +5,13 @@ use crate::tpm::structure::{
 use crate::tpm::{FromTpm, FromTpmWithSelector, ToTpm};
 use crate::TpmResult;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmsEccPoint {
     pub x: Tpm2BEccParameter,
     pub y: Tpm2BEccParameter,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TpmtEccScheme {
     pub scheme: TpmiAlgorithmEccScheme,
     pub details: TpmuAsymmetricScheme,

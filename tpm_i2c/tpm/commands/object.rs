@@ -31,6 +31,42 @@ impl Tpm {
         }
     }
 
+    pub fn load(
+        &mut self,
+        parent_handle: TpmHandle,
+        auth_area: &mut TpmSession,
+        in_private: Tpm2BPrivate,
+        in_public: Tpm2BPublic,
+    ) -> TpmResult<(TpmHandle, Tpm2BName)> {
+        let (public_buf, _, _) = self.read_public(parent_handle)?;
+
+        auth_area.refresh_nonce();
+        let mut cmd = Tpm2Command::new_with_session(
+            TpmStructureTag::Sessions,
+            Tpm2CommandCode::Load,
+            vec![parent_handle],
+            vec![auth_area.clone()],
+            vec![Box::new(in_private), Box::new(in_public)],
+        );
+        cmd.set_public_data_for_object_handle(parent_handle, public_buf.public_area.unwrap());
+        let res = self.execute_with_session(&cmd, 1)?;
+
+        if !res.auth_area.is_empty() {
+            auth_area.set_tpm_nonce(res.auth_area[0].nonce.buffer.clone());
+            assert!(auth_area.validate(&res, &res.auth_area[0].hmac.buffer));
+        }
+
+        if res.response_code != TpmResponseCode::Success {
+            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
+        } else {
+            let v = &res.params;
+            let (name, v) = Tpm2BName::from_tpm(v)?;
+            assert!(v.is_empty());
+
+            Ok((res.handles[0], name))
+        }
+    }
+
     pub fn create(
         &mut self,
         parent_handle: TpmHandle,
