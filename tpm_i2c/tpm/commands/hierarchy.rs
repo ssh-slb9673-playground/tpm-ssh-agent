@@ -15,7 +15,6 @@ impl Tpm {
         &mut self,
         primary_handle: TpmHandle,
         auth_area: &mut TpmSession,
-        auth_value: Vec<u8>,
         params: Tpm2CreateParameters,
     ) -> TpmResult<Tpm2CreatePrimaryResponse> {
         auth_area.refresh_nonce();
@@ -25,7 +24,6 @@ impl Tpm {
                 Tpm2CommandCode::CreatePrimary,
                 vec![primary_handle],
                 vec![auth_area.clone()],
-                auth_value.clone(),
                 vec![
                     Box::new(params.in_sensitive),
                     Box::new(params.in_public),
@@ -38,7 +36,7 @@ impl Tpm {
 
         if !res.auth_area.is_empty() {
             auth_area.set_tpm_nonce(res.auth_area[0].nonce.buffer.clone());
-            assert!(auth_area.validate(&res, auth_value.clone(), &res.auth_area[0].hmac.buffer));
+            assert!(auth_area.validate(&res, &res.auth_area[0].hmac.buffer));
         }
 
         if res.response_code != TpmResponseCode::Success {

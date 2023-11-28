@@ -35,30 +35,29 @@ impl Tpm {
         &mut self,
         parent_handle: TpmHandle,
         auth_area: &mut TpmSession,
-        auth_value: Vec<u8>,
         params: Tpm2CreateParameters,
     ) -> TpmResult<Tpm2CreateResponse> {
+        let (public_buf, _, _) = self.read_public(parent_handle)?;
+
         auth_area.refresh_nonce();
-        let res = self.execute_with_session(
-            &Tpm2Command::new_with_session(
-                TpmStructureTag::Sessions,
-                Tpm2CommandCode::Create,
-                vec![parent_handle],
-                vec![auth_area.clone()],
-                auth_value.clone(),
-                vec![
-                    Box::new(params.in_sensitive),
-                    Box::new(params.in_public),
-                    Box::new(params.outside_info),
-                    Box::new(params.creation_pcr),
-                ],
-            ),
-            1,
-        )?;
+        let mut cmd = Tpm2Command::new_with_session(
+            TpmStructureTag::Sessions,
+            Tpm2CommandCode::Create,
+            vec![parent_handle],
+            vec![auth_area.clone()],
+            vec![
+                Box::new(params.in_sensitive),
+                Box::new(params.in_public),
+                Box::new(params.outside_info),
+                Box::new(params.creation_pcr),
+            ],
+        );
+        cmd.set_public_data_for_object_handle(parent_handle, public_buf.public_area.unwrap());
+        let res = self.execute_with_session(&cmd, 1)?;
 
         if !res.auth_area.is_empty() {
             auth_area.set_tpm_nonce(res.auth_area[0].nonce.buffer.clone());
-            assert!(auth_area.validate(&res, auth_value.clone(), &res.auth_area[0].hmac.buffer));
+            assert!(auth_area.validate(&res, &res.auth_area[0].hmac.buffer));
         }
 
         if res.response_code != TpmResponseCode::Success {

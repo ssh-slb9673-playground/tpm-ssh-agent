@@ -150,7 +150,7 @@ impl I2CTpmAccessor for MCP2221A {
             // read_buf[1] == 1 <=> "I2C engine is busy (command not completed)."
             if read_buf[1] == 1 {
                 retry += 1;
-                if retry > 20 {
+                if retry > retry_max {
                     self.setup_i2c()?;
                     return Err(Error::Hardware);
                 }

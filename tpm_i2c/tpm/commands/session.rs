@@ -20,14 +20,12 @@ impl Tpm {
         session_type: TpmSessionType,
         symmetric: TpmtSymdef,
         auth_hash: TpmiAlgorithmHash,
-        auth_value: Vec<u8>,
     ) -> TpmResult<TpmSession> {
         let cmd = Tpm2Command::new_with_session(
             TpmStructureTag::NoSessions,
             Tpm2CommandCode::StartAuthSession,
             vec![TpmHandle::from(&tpm_key), TpmHandle::from(&bind)],
             vec![],
-            auth_value,
             vec![
                 Box::new(nonce_caller.clone()),
                 Box::new(encrypted_salt),

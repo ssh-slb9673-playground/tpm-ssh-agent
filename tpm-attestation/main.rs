@@ -46,10 +46,37 @@ fn main() -> Result<()> {
         }
     }
 
-    let _endorsement_key = create_endorsement_key(&mut tpm, &mut session)?;
-    let _attestation_key = create_signing_key("password".as_bytes(), &mut tpm, &mut session)?;
+    println!("[+] Persistent Keys:");
+    if let TpmuCapabilities::Handles(handles) = tpm
+        .get_capability(
+            TpmCapabilities::Handles,
+            (TpmHandleType::Persistent as u32) << 24,
+            10,
+        )?
+        .1
+        .data
+    {
+        for handle in &handles.handle {
+            println!("  - 0x{:08x}", handle);
+        }
+    }
 
-    dbg!(&_attestation_key);
+    println!("Generate: EK");
+    let _endorsement_key = create_endorsement_key(&mut tpm, &mut session)?;
+    println!("Generate: AK");
+    let attestation_key = create_signing_key("password".as_bytes(), &mut tpm, &mut session)?;
+    dbg!(&attestation_key);
+
+    println!("Generate: MK");
+    session.set_entity_auth_value("password".as_bytes());
+    let main_key = create_main_key(
+        attestation_key.handle,
+        "password".as_bytes(),
+        &mut tpm,
+        &mut session,
+    )?;
+
+    dbg!(&main_key);
 
     let _ek_certificate = nv_read(&mut tpm, &mut session, 0x01c0000a)?;
 
@@ -68,7 +95,6 @@ fn nv_read(tpm: &mut Tpm, session: &mut TpmSession, nv_index: TpmHandle) -> Resu
     loop {
         let data = tpm.nv_read(
             session,
-            vec![],
             &TpmiHandleNvAuth::Owner,
             &TpmiHandleNvIndex::NvIndex(nv_index),
             size.min(NV_BUFFER_MAX),
@@ -103,7 +129,7 @@ fn create_endorsement_key(
     session: &mut TpmSession,
 ) -> Result<tpm_i2c::tpm::commands::Tpm2CreatePrimaryResponse> {
     create_primary(
-        TpmiHandleHierarchy::Endorsement,
+        TpmPermanentHandle::Endorsement.into(),
         &[],
         tpm,
         session,
@@ -146,13 +172,56 @@ fn create_endorsement_key(
     )
 }
 
+fn create_main_key(
+    parent_handle: TpmHandle,
+    auth_value: &[u8],
+    tpm: &mut Tpm,
+    session: &mut TpmSession,
+) -> Result<tpm_i2c::tpm::commands::Tpm2CreateResponse> {
+    create(
+        parent_handle,
+        auth_value,
+        tpm,
+        session,
+        Tpm2BPublic::new(TpmtPublic {
+            algorithm_type: TpmiAlgorithmPublic::Rsa,
+            algorithm_name: TpmiAlgorithmHash::Sha256,
+            object_attributes: TpmAttrObject::new()
+                .with_fixed_tpm(true)
+                .with_fixed_parent(true)
+                .with_sensitive_data_origin(true)
+                .with_user_with_auth(true)
+                .with_decrypt(true),
+            auth_policy: Tpm2BDigest::new(&[]),
+            parameters: TpmuPublicParams::RsaDetail(TpmsRsaParams {
+                key_bits: 2048,
+                exponent: 65537,
+                symmetric: TpmtSymdefObject {
+                    algorithm: TpmiAlgorithmSymObject::Null,
+                    key_bits: TpmuSymKeybits::Null,
+                    mode: TpmuSymMode::Null,
+                },
+                scheme: TpmtRsaScheme {
+                    scheme: TpmiAlgorithmRsaScheme::Oaep,
+                    details: TpmuAsymmetricScheme::Encryption(TpmsEncryptionScheme::AEH(
+                        TpmsSchemeHash {
+                            hash_algorithm: TpmiAlgorithmHash::Sha256,
+                        },
+                    )),
+                },
+            }),
+            unique: TpmuPublicIdentifier::Rsa(Tpm2BPublicKeyRsa::new(&[0; 256])),
+        }),
+    )
+}
+
 fn create_signing_key(
     auth_value: &[u8],
     tpm: &mut Tpm,
     session: &mut TpmSession,
 ) -> Result<tpm_i2c::tpm::commands::Tpm2CreatePrimaryResponse> {
     create_primary(
-        TpmiHandleHierarchy::Owner,
+        TpmPermanentHandle::Owner.into(),
         auth_value,
         tpm,
         session,
@@ -164,18 +233,21 @@ fn create_signing_key(
                 .with_fixed_parent(true)
                 .with_sensitive_data_origin(true)
                 .with_user_with_auth(true)
-                .with_decrypt(true)
                 .with_sign_or_encrypt(true),
             auth_policy: Tpm2BDigest::new(&[]),
             parameters: TpmuPublicParams::EccDetail(TpmsEccParams {
                 symmetric: TpmtSymdefObject {
-                    algorithm: TpmiAlgorithmSymObject::Aes,
-                    key_bits: TpmuSymKeybits::SymmetricAlgo(128),
-                    mode: TpmuSymMode::SymmetricAlgo(TpmiAlgorithmSymMode::CFB),
+                    algorithm: TpmiAlgorithmSymObject::Null,
+                    key_bits: TpmuSymKeybits::Null,
+                    mode: TpmuSymMode::Null,
                 },
                 scheme: TpmtEccScheme {
-                    scheme: TpmiAlgorithmEccScheme::Null,
-                    details: TpmuAsymmetricScheme::Null,
+                    scheme: TpmiAlgorithmEccScheme::EcDsa,
+                    details: TpmuAsymmetricScheme::Signature(TpmsSignatureScheme::AX(
+                        TpmsSchemeHash {
+                            hash_algorithm: TpmiAlgorithmHash::Sha256,
+                        },
+                    )),
                 },
                 curve_id: TpmEccCurve::NistP256,
                 kdf: TpmtKdfScheme {
@@ -192,16 +264,15 @@ fn create_signing_key(
 }
 
 fn create_primary(
-    primary_handle: TpmiHandleHierarchy,
+    primary_handle: TpmHandle,
     auth_value: &[u8],
     tpm: &mut Tpm,
     session: &mut TpmSession,
     public_area: Tpm2BPublic,
 ) -> Result<tpm_i2c::tpm::commands::Tpm2CreatePrimaryResponse> {
     tpm.create_primary(
-        primary_handle as TpmHandle,
+        primary_handle,
         session,
-        vec![],
         Tpm2CreateParameters {
             in_sensitive: Tpm2BSensitiveCreate {
                 sensitive: TpmsSensitiveCreate {
@@ -229,7 +300,6 @@ fn create(
     tpm.create(
         parent_handle,
         session,
-        vec![],
         Tpm2CreateParameters {
             in_sensitive: Tpm2BSensitiveCreate {
                 sensitive: TpmsSensitiveCreate {
@@ -260,7 +330,6 @@ fn open_session(tpm: &mut Tpm) -> Result<TpmSession> {
             mode: TpmuSymMode::Null,
         },
         TpmiAlgorithmHash::Sha256,
-        vec![],
     )?;
     session.attributes.set_continue_session(true);
 

@@ -13,7 +13,6 @@ impl Tpm {
     pub fn nv_read(
         &mut self,
         auth_area: &mut TpmSession,
-        auth_value: Vec<u8>,
         auth_handle: &TpmiHandleNvAuth,
         nv_index: &TpmiHandleNvIndex,
         size: u16,
@@ -27,7 +26,6 @@ impl Tpm {
             Tpm2CommandCode::NvRead,
             vec![auth_handle.into(), nv_index.into()],
             vec![auth_area.clone()],
-            auth_value.clone(),
             vec![Box::new(size), Box::new(offset)],
         );
         cmd.set_public_data_for_nv_index(nv_index.into(), public_buf.nv_public.unwrap());
@@ -36,7 +34,7 @@ impl Tpm {
 
         if !res.auth_area.is_empty() {
             auth_area.set_tpm_nonce(res.auth_area[0].nonce.buffer.clone());
-            assert!(auth_area.validate(&res, auth_value.clone(), &res.auth_area[0].hmac.buffer));
+            assert!(auth_area.validate(&res, &res.auth_area[0].hmac.buffer));
         }
 
         if res.response_code != TpmResponseCode::Success {

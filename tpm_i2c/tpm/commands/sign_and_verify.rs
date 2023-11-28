@@ -14,7 +14,6 @@ impl Tpm {
         &mut self,
         key_handle: TpmHandle,
         auth_area: &mut TpmSession,
-        auth_value: Vec<u8>,
         digest: &[u8],
         in_scheme: TpmtSignatureScheme,
         validation: TpmtTicketHashCheck,
@@ -27,7 +26,6 @@ impl Tpm {
             Tpm2CommandCode::Sign,
             vec![key_handle],
             vec![auth_area.clone()],
-            auth_value.clone(),
             vec![
                 Box::new(Tpm2BDigest::new(digest)),
                 Box::new(in_scheme),
@@ -39,7 +37,7 @@ impl Tpm {
 
         if !res.auth_area.is_empty() {
             auth_area.set_tpm_nonce(res.auth_area[0].nonce.buffer.clone());
-            assert!(auth_area.validate(&res, auth_value.clone(), &res.auth_area[0].hmac.buffer));
+            assert!(auth_area.validate(&res, &res.auth_area[0].hmac.buffer));
         }
 
         if res.response_code != TpmResponseCode::Success {

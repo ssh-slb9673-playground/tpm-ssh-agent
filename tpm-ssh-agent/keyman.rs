@@ -109,7 +109,6 @@ impl TpmKeyManager {
             .create_primary(
                 TpmPermanentHandle::Owner.into(),
                 self.state.session.as_mut().unwrap(),
-                vec![],
                 Tpm2CreateParameters {
                     in_sensitive: Tpm2BSensitiveCreate {
                         sensitive: TpmsSensitiveCreate {
@@ -174,7 +173,6 @@ impl TpmKeyManager {
                 mode: TpmuSymMode::Null,
             },
             TpmiAlgorithmHash::Sha256,
-            vec![],
         )?;
         session.attributes.set_continue_session(true);
 
@@ -187,7 +185,6 @@ impl TpmKeyManager {
         let sig = self.tpm.sign(
             self.state.primary_handle.unwrap(),
             self.state.session.as_mut().unwrap(),
-            "password".as_bytes().to_vec(),
             &digest,
             TpmtSignatureScheme {
                 scheme: TpmiAlgorithmSigScheme::EcDsa,

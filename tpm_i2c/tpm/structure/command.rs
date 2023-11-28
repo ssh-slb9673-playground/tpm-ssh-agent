@@ -14,7 +14,6 @@ pub struct Tpm2Command {
     pub handles: Vec<TpmHandle>,
     pub auth_area: Vec<TpmSession>,
     pub params: Vec<Box<dyn ToTpm>>,
-    pub auth_value: Vec<u8>,
     handle_public_map: HashMap<TpmHandle, PublicData>,
 }
 
@@ -29,7 +28,6 @@ impl Tpm2Command {
             command_code,
             handles: vec![],
             auth_area: vec![],
-            auth_value: vec![],
             params,
             handle_public_map: HashMap::new(),
         }
@@ -40,7 +38,6 @@ impl Tpm2Command {
         command_code: Tpm2CommandCode,
         handles: Vec<TpmHandle>,
         auth_area: Vec<TpmSession>,
-        auth_value: Vec<u8>,
         params: Vec<Box<dyn ToTpm>>,
     ) -> Self {
         Tpm2Command {
@@ -48,7 +45,6 @@ impl Tpm2Command {
             command_code,
             handles,
             auth_area,
-            auth_value,
             params,
             handle_public_map: HashMap::new(),
         }

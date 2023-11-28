@@ -17,6 +17,8 @@ pub struct TpmSession {
     pub attributes: TpmAttrSession,
     pub bind: TpmiDhEntity,
     pub tpm_key: TpmiDhObject,
+    pub binded_auth_value: Vec<u8>,
+    pub entity_auth_value: Vec<u8>,
 }
 
 fn gen_nonce() -> [u8; 16] {
@@ -47,6 +49,8 @@ impl TpmSession {
             attributes,
             bind,
             tpm_key,
+            binded_auth_value: vec![],
+            entity_auth_value: vec![],
         }
     }
 
@@ -70,9 +74,26 @@ impl TpmSession {
         self.rotate_nonce();
     }
 
+    pub fn set_binded_auth_value(&mut self, auth_value: &[u8]) {
+        self.entity_auth_value = auth_value.clone().to_vec();
+        self.binded_auth_value = auth_value.clone().to_vec();
+    }
+
+    pub fn get_binded_auth_value(&self) -> Vec<u8> {
+        self.binded_auth_value.clone()
+    }
+
+    pub fn set_entity_auth_value(&mut self, auth_value: &[u8]) {
+        self.entity_auth_value = auth_value.clone().to_vec();
+    }
+
+    pub fn get_entity_auth_value(&self) -> Vec<u8> {
+        self.entity_auth_value.clone()
+    }
+
     pub fn generate(&self, cmd: &Tpm2Command) -> TpmAuthCommand {
         let cphash = cmd.cphash(self.algorithm);
-        let hmac = self.compute_hmac(cphash, cmd.auth_value.clone());
+        let hmac = self.compute_hmac(cphash);
         TpmAuthCommand::new(
             self.handle,
             self.nonce_new.as_ref().unwrap_or(&self.nonce.0),
@@ -81,12 +102,12 @@ impl TpmSession {
         )
     }
 
-    pub fn validate(&self, res: &Tpm2Response, auth_value: Vec<u8>, expected: &Vec<u8>) -> bool {
+    pub fn validate(&self, res: &Tpm2Response, expected: &Vec<u8>) -> bool {
         let rphash = res.rphash(self.algorithm);
-        &self.compute_hmac(rphash, auth_value) == expected
+        &self.compute_hmac(rphash) == expected
     }
 
-    fn compute_hmac(&self, phash: Vec<u8>, auth_value: Vec<u8>) -> Vec<u8> {
+    fn compute_hmac(&self, phash: Vec<u8>) -> Vec<u8> {
         let (nonce_newer, nonce_older) = if let Some(x) = self.nonce_new.as_ref() {
             (x, &self.nonce.0)
         } else {
@@ -102,13 +123,19 @@ impl TpmSession {
             self.attributes.to_tpm(),
         ]
         .concat();
-        self.algorithm.hmac(
-            &[self.generate_session_key(vec![], vec![], bits), auth_value].concat(),
-            &target_data,
-        )
+        let session_key = [
+            self.generate_session_key(vec![], bits),
+            if self.binded_auth_value != self.entity_auth_value {
+                self.entity_auth_value.clone()
+            } else {
+                vec![]
+            },
+        ]
+        .concat();
+        self.algorithm.hmac(&session_key, &target_data)
     }
 
-    pub fn generate_session_key(&self, auth_value: Vec<u8>, salt: Vec<u8>, bits: u32) -> Vec<u8> {
+    pub fn generate_session_key(&self, salt: Vec<u8>, bits: u32) -> Vec<u8> {
         // [TCG TPM Specification Part 1] 19.6.8 "sessionKey Creation"
         if self.bind == TpmiDhEntity::Null && self.tpm_key == TpmiDhObject::Null {
             return vec![];
@@ -118,12 +145,13 @@ impl TpmSession {
             if self.bind == TpmiDhEntity::Null {
                 vec![]
             } else {
-                auth_value
+                self.binded_auth_value.clone()
             },
             if self.tpm_key == TpmiDhObject::Null {
                 vec![]
             } else {
-                salt
+                dbg!(salt);
+                unimplemented!();
             },
         ]
         .concat();
