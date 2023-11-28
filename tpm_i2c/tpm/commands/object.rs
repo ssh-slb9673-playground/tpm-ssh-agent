@@ -53,7 +53,7 @@ impl Tpm {
             ],
         );
         cmd.set_public_data_for_object_handle(parent_handle, public_buf.public_area.unwrap());
-        let res = self.execute_with_session(&cmd, 1)?;
+        let res = self.execute_with_session(&cmd, 0)?;
 
         if !res.auth_area.is_empty() {
             auth_area.set_tpm_nonce(res.auth_area[0].nonce.buffer.clone());
@@ -69,17 +69,14 @@ impl Tpm {
             let (creation_data, v) = Tpm2BCreationData::from_tpm(v)?;
             let (creation_hash, v) = Tpm2BDigest::from_tpm(v)?;
             let (creation_ticket, v) = TpmtTicketCreation::from_tpm(v)?;
-            let (name, v) = Tpm2BName::from_tpm(v)?;
             assert!(v.is_empty());
 
             Ok(Tpm2CreateResponse {
-                handle: res.handles[0],
                 out_private,
                 out_public,
                 creation_data,
                 creation_hash,
                 creation_ticket,
-                name,
             })
         }
     }
@@ -87,13 +84,11 @@ impl Tpm {
 
 #[derive(Debug)]
 pub struct Tpm2CreateResponse {
-    pub handle: TpmHandle,
     pub out_public: Tpm2BPublic,
     pub out_private: Tpm2BPrivate,
     pub creation_data: Tpm2BCreationData,
     pub creation_hash: Tpm2BDigest,
     pub creation_ticket: TpmtTicketCreation,
-    pub name: Tpm2BName,
 }
 
 #[derive(Debug)]

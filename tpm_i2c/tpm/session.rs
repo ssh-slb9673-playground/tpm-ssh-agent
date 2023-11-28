@@ -151,7 +151,7 @@ impl TpmSession {
                 vec![]
             } else {
                 dbg!(salt);
-                unimplemented!();
+                todo!();
             },
         ]
         .concat();
