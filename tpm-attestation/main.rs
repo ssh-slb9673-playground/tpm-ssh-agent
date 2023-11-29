@@ -71,8 +71,15 @@ fn main() -> Result<()> {
 
     println!("Generate: EK");
     session.set_entity_auth_value(&[]);
-    let _endorsement_key = create_endorsement_key(&mut tpm, &mut session)?;
+    let endorsement_key = create_endorsement_key(&mut tpm, &mut session)?;
     let _ek_certificate = nv_read(&mut tpm, &mut session, 0x01c0000a)?;
+
+    let credential = Tpm2BDigest::new("test data".as_bytes());
+    let (credential_blob, secret) =
+        tpm.make_credential(endorsement_key.handle, &mut session, credential, ak_name)?;
+
+    println!("credential_blob: {:?}", credential_blob);
+    println!("secret: {:?}", secret);
 
     tpm.flush_context(session.handle)?;
     tpm.shutdown(false)?;

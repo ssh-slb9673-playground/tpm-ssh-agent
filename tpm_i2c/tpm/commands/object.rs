@@ -3,9 +3,9 @@ use crate::tpm::session::TpmSession;
     Ref. [TCG TPM 2.0 Library Part3] Section 12. "Object Commands"
 */
 use crate::tpm::structure::{
-    Tpm2BCreationData, Tpm2BData, Tpm2BDigest, Tpm2BName, Tpm2BPrivate, Tpm2BPublic,
-    Tpm2BSensitiveCreate, Tpm2Command, Tpm2CommandCode, TpmHandle, TpmResponseCode,
-    TpmStructureTag, TpmlPcrSelection, TpmtTicketCreation,
+    Tpm2BCreationData, Tpm2BData, Tpm2BDigest, Tpm2BEncryptedSecret, Tpm2BIdentityObject,
+    Tpm2BName, Tpm2BPrivate, Tpm2BPublic, Tpm2BSensitiveCreate, Tpm2Command, Tpm2CommandCode,
+    TpmHandle, TpmResponseCode, TpmStructureTag, TpmlPcrSelection, TpmtTicketCreation,
 };
 use crate::tpm::{FromTpm, Tpm, TpmError};
 use crate::TpmResult;
@@ -114,6 +114,43 @@ impl Tpm {
                 creation_hash,
                 creation_ticket,
             })
+        }
+    }
+
+    pub fn make_credential(
+        &mut self,
+        handle: TpmHandle,
+        auth_area: &mut TpmSession,
+        credential: Tpm2BDigest,
+        object_name: Tpm2BName,
+    ) -> TpmResult<(Tpm2BIdentityObject, Tpm2BEncryptedSecret)> {
+        let (public_buf, _, _) = self.read_public(handle)?;
+
+        auth_area.refresh_nonce();
+        let mut cmd = Tpm2Command::new_with_session(
+            TpmStructureTag::NoSessions,
+            Tpm2CommandCode::MakeCredential,
+            vec![handle],
+            vec![],
+            vec![Box::new(credential), Box::new(object_name)],
+        );
+        cmd.set_public_data_for_object_handle(handle, public_buf.public_area.unwrap());
+        let res = self.execute_with_session(&cmd, 0)?;
+
+        if !res.auth_area.is_empty() {
+            auth_area.set_tpm_nonce(res.auth_area[0].nonce.buffer.clone());
+            assert!(auth_area.validate(&res, &res.auth_area[0].hmac.buffer));
+        }
+
+        if res.response_code != TpmResponseCode::Success {
+            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
+        } else {
+            let v = &res.params;
+            let (credential_blob, v) = Tpm2BIdentityObject::from_tpm(v)?;
+            let (secret, v) = Tpm2BEncryptedSecret::from_tpm(v)?;
+            assert!(v.is_empty());
+
+            Ok((credential_blob, secret))
         }
     }
 }

@@ -52,6 +52,7 @@ pub enum Tpm2CommandCode {
     NvReadPublic = 0x00000169,
     Create = 0x00000153,
     Load = 0x00000157,
+    MakeCredential = 0x00000168,
 }
 
 // TPM_SU
