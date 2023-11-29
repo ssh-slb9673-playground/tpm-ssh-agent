@@ -45,11 +45,12 @@ fn main() -> Result<()> {
         }
     }
 
+    // 1. CLIENT: Generate Storage Root Key
     println!("Generate: SRK");
-
     let storage_root_key =
         create_storage_root_key("srk_authvalue".as_bytes(), &mut tpm, &mut session)?;
 
+    // 2. CLIENT: Generate Attestation Key
     println!("Generate: AK");
     session.set_entity_auth_value("srk_authvalue".as_bytes());
     let attestation_key = create_attestation_key(
@@ -69,18 +70,27 @@ fn main() -> Result<()> {
     println!("ak_handle: {:08x}", ak_handle);
     println!("ak_name: {:?}", ak_name);
 
+    // 3. CLIENT: Recover Endorsement Key
     println!("Generate: EK");
     session.set_entity_auth_value(&[]);
-    let endorsement_key = create_endorsement_key(&mut tpm, &mut session)?;
-    let _ek_certificate = nv_read(&mut tpm, &mut session, 0x01c0000a)?;
+    let endorsement_key = create_endorsement_key(&mut tpm, &mut session)?; // EK
+    let _ek_certificate = nv_read(&mut tpm, &mut session, 0x01c0000a)?; // EKcert
 
-    let credential = Tpm2BDigest::new("test data".as_bytes());
+    // 4. CLIENT => SERVER: (EKcert, EKpub, AKpub, AKname)
+    // 5. SERVER: Verify EKcert
+    // 6. SERVER: Generate credential
+    let credential = Tpm2BDigest::new("test credential data".as_bytes());
+
+    // 7. SERVER: Generate Encrypted Credential for EK
     let (credential_blob, secret) =
         tpm.make_credential(endorsement_key.handle, credential.clone(), ak_name)?;
 
     println!("credential_blob: {:?}", credential_blob);
     println!("secret: {:?}", secret);
 
+    // 8. SEVER => CLIENT: (credential_blob, secret)
+    // 9. CLIENT: Activate credential
+    // 9-1. Start policy session
     let mut ek_session = tpm.start_auth_session(
         TpmiDhObject::Null,
         TpmiDhEntity::Null,
@@ -97,7 +107,7 @@ fn main() -> Result<()> {
     ek_session.attributes.set_continue_session(true);
     println!("ek_session: {:08x}", ek_session.handle);
 
-    println!("PolicySecret");
+    // 9-2. Apply PolicySecret(TPM_RH_ENDORSEMENT) to access EK
     tpm.policy_secret(
         TpmPermanentHandle::Endorsement.into(),
         ek_session.handle,
@@ -110,7 +120,8 @@ fn main() -> Result<()> {
         },
     )?;
 
-    println!("ActivateCredential");
+    // 9-3. Execute TPM2_ActivateCredential
+    println!("[+] ActivateCredential");
     session.set_entity_auth_value("attestation_key_authvalue".as_bytes());
     let generated_credential = tpm.activate_credential(
         ak_handle,
@@ -120,9 +131,13 @@ fn main() -> Result<()> {
         secret,
     )?;
 
+    // 9-4. Verify Credential
+    // In this code, we didn't use any verifiable data for the credential
+    // so simple assertion only
     assert_eq!(credential.buffer, generated_credential.buffer);
     println!("Remote Attestation Successed!");
 
+    // END
     tpm.flush_context(ek_session.handle)?;
     tpm.flush_context(session.handle)?;
     tpm.shutdown(false)?;
