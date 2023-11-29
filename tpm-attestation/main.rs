@@ -30,7 +30,6 @@ fn main() -> Result<()> {
     tpm.print_info()?;
     let mut session = open_session(&mut tpm)?;
     println!("Session Opened: {:08x}", session.handle);
-
     println!("[+] NV indexes:");
     if let TpmuCapabilities::Handles(nv) = tpm
         .get_capability(
@@ -47,6 +46,7 @@ fn main() -> Result<()> {
     }
 
     println!("Generate: SRK");
+
     let storage_root_key =
         create_storage_root_key("srk_authvalue".as_bytes(), &mut tpm, &mut session)?;
 
@@ -81,6 +81,34 @@ fn main() -> Result<()> {
     println!("credential_blob: {:?}", credential_blob);
     println!("secret: {:?}", secret);
 
+    let mut ek_session = tpm.start_auth_session(
+        TpmiDhObject::Null,
+        TpmiDhEntity::Null,
+        Tpm2BNonce::new(&next_nonce()),
+        Tpm2BEncryptedSecret::new(&[]),
+        TpmSessionType::Policy,
+        TpmtSymdef {
+            algorithm: TpmiAlgorithmSymmetric::Null,
+            key_bits: TpmuSymKeybits::Null,
+            mode: TpmuSymMode::Null,
+        },
+        TpmiAlgorithmHash::Sha256,
+    )?;
+    ek_session.attributes.set_continue_session(true);
+
+    dbg!(tpm.policy_secret(
+        TpmPermanentHandle::Endorsement.into(),
+        ek_session.handle,
+        &mut session,
+        PolicySecretParameters {
+            nonce_tpm: Tpm2BDigest::new(&[]),
+            cphash_a: Tpm2BDigest::new(&[]),
+            policy_reference: Tpm2BDigest::new(&[]),
+            expiration: 0,
+        },
+    )?);
+
+    tpm.flush_context(ek_session.handle)?;
     tpm.flush_context(session.handle)?;
     tpm.shutdown(false)?;
 

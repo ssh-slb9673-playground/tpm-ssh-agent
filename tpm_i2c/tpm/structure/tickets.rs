@@ -35,3 +35,4 @@ impl_to_tpm! {
 
 pub type TpmtTicketCreation = TpmtTicketBase;
 pub type TpmtTicketHashCheck = TpmtTicketBase;
+pub type TpmtTicketAuth = TpmtTicketBase;

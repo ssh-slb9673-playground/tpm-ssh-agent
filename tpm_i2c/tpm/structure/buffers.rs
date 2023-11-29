@@ -48,3 +48,4 @@ pub type Tpm2BName = Tpm2BDigest;
 pub type Tpm2BMaxNvBuffer = Tpm2BDigest;
 pub type Tpm2BPrivate = Tpm2BDigest;
 pub type Tpm2BIdentityObject = Tpm2BDigest;
+pub type Tpm2BTimeout = Tpm2BDigest;
