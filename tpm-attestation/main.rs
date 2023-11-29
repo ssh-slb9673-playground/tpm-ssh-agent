@@ -76,7 +76,7 @@ fn main() -> Result<()> {
 
     let credential = Tpm2BDigest::new("test data".as_bytes());
     let (credential_blob, secret) =
-        tpm.make_credential(endorsement_key.handle, &mut session, credential, ak_name)?;
+        tpm.make_credential(endorsement_key.handle, credential.clone(), ak_name)?;
 
     println!("credential_blob: {:?}", credential_blob);
     println!("secret: {:?}", secret);
@@ -95,8 +95,10 @@ fn main() -> Result<()> {
         TpmiAlgorithmHash::Sha256,
     )?;
     ek_session.attributes.set_continue_session(true);
+    println!("ek_session: {:08x}", ek_session.handle);
 
-    dbg!(tpm.policy_secret(
+    println!("PolicySecret");
+    tpm.policy_secret(
         TpmPermanentHandle::Endorsement.into(),
         ek_session.handle,
         &mut session,
@@ -106,7 +108,20 @@ fn main() -> Result<()> {
             policy_reference: Tpm2BDigest::new(&[]),
             expiration: 0,
         },
-    )?);
+    )?;
+
+    println!("ActivateCredential");
+    session.set_entity_auth_value("attestation_key_authvalue".as_bytes());
+    let generated_credential = tpm.activate_credential(
+        ak_handle,
+        endorsement_key.handle,
+        (&mut session, &mut ek_session),
+        credential_blob,
+        secret,
+    )?;
+
+    assert_eq!(credential.buffer, generated_credential.buffer);
+    println!("Remote Attestation Successed!");
 
     tpm.flush_context(ek_session.handle)?;
     tpm.flush_context(session.handle)?;
@@ -174,8 +189,9 @@ fn create_endorsement_key(
                 .with_restricted(true)
                 .with_decrypt(true),
             auth_policy: Tpm2BDigest::new(&[
-                131, 113, 151, 103, 68, 132, 179, 248, 26, 144, 204, 141, 70, 165, 215, 36, 253,
-                82, 215, 110, 6, 82, 11, 100, 242, 161, 218, 27, 51, 20, 105, 170,
+                0x83, 0x71, 0x97, 0x67, 0x44, 0x84, 0xB3, 0xF8, 0x1A, 0x90, 0xCC, 0x8D, 0x46, 0xA5,
+                0xD7, 0x24, 0xFD, 0x52, 0xD7, 0x6E, 0x06, 0x52, 0x0B, 0x64, 0xF2, 0xA1, 0xDA, 0x1B,
+                0x33, 0x14, 0x69, 0xAA,
             ]), // TPM2_PolicySecret(TPM_RH_ENDORSEMENT)
             parameters: TpmuPublicParams::EccDetail(TpmsEccParams {
                 symmetric: TpmtSymdefObject {

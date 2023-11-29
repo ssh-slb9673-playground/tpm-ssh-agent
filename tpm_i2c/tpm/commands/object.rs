@@ -120,13 +120,11 @@ impl Tpm {
     pub fn make_credential(
         &mut self,
         handle: TpmHandle,
-        auth_area: &mut TpmSession,
         credential: Tpm2BDigest,
         object_name: Tpm2BName,
     ) -> TpmResult<(Tpm2BIdentityObject, Tpm2BEncryptedSecret)> {
         let (public_buf, _, _) = self.read_public(handle)?;
 
-        auth_area.refresh_nonce();
         let mut cmd = Tpm2Command::new_with_session(
             TpmStructureTag::NoSessions,
             Tpm2CommandCode::MakeCredential,
@@ -137,11 +135,6 @@ impl Tpm {
         cmd.set_public_data_for_object_handle(handle, public_buf.public_area.unwrap());
         let res = self.execute_with_session(&cmd, 0)?;
 
-        if !res.auth_area.is_empty() {
-            auth_area.set_tpm_nonce(res.auth_area[0].nonce.buffer.clone());
-            assert!(auth_area.validate(&res, &res.auth_area[0].hmac.buffer));
-        }
-
         if res.response_code != TpmResponseCode::Success {
             Err(TpmError::UnsuccessfulResponse(res.response_code).into())
         } else {
@@ -151,6 +144,52 @@ impl Tpm {
             assert!(v.is_empty());
 
             Ok((credential_blob, secret))
+        }
+    }
+
+    pub fn activate_credential(
+        &mut self,
+        activate_handle: TpmHandle,
+        key_handle: TpmHandle,
+        auth_area: (&mut TpmSession, &mut TpmSession),
+        credential_blob: Tpm2BIdentityObject,
+        secret: Tpm2BEncryptedSecret,
+    ) -> TpmResult<Tpm2BDigest> {
+        let (public_buf_a, _, _) = self.read_public(activate_handle)?;
+        let (public_buf_k, _, _) = self.read_public(key_handle)?;
+
+        auth_area.0.refresh_nonce();
+        auth_area.1.refresh_nonce();
+        let mut cmd = Tpm2Command::new_with_session(
+            TpmStructureTag::Sessions,
+            Tpm2CommandCode::ActivateCredential,
+            vec![activate_handle, key_handle],
+            vec![auth_area.0.clone(), auth_area.1.clone()],
+            vec![Box::new(credential_blob), Box::new(secret)],
+        );
+        cmd.set_public_data_for_object_handle(activate_handle, public_buf_a.public_area.unwrap());
+        cmd.set_public_data_for_object_handle(key_handle, public_buf_k.public_area.unwrap());
+        let res = self.execute_with_session(&cmd, 0)?;
+
+        if !res.auth_area.is_empty() {
+            auth_area
+                .0
+                .set_tpm_nonce(res.auth_area[0].nonce.buffer.clone());
+            assert!(auth_area.0.validate(&res, &res.auth_area[0].hmac.buffer));
+            auth_area
+                .1
+                .set_tpm_nonce(res.auth_area[1].nonce.buffer.clone());
+            assert!(auth_area.1.validate(&res, &res.auth_area[1].hmac.buffer));
+        }
+
+        if res.response_code != TpmResponseCode::Success {
+            Err(TpmError::UnsuccessfulResponse(res.response_code).into())
+        } else {
+            let v = &res.params;
+            let (cert_info, v) = Tpm2BDigest::from_tpm(v)?;
+            assert!(v.is_empty());
+
+            Ok(cert_info)
         }
     }
 }

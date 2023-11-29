@@ -54,6 +54,7 @@ pub enum Tpm2CommandCode {
     Load = 0x00000157,
     MakeCredential = 0x00000168,
     PolicySecret = 0x00000151,
+    ActivateCredential = 0x00000147,
 }
 
 // TPM_SU
