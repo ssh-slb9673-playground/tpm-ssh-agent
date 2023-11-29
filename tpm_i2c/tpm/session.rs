@@ -17,7 +17,7 @@ pub struct TpmSession {
     pub attributes: TpmAttrSession,
     pub bind: TpmiDhEntity,
     pub tpm_key: TpmiDhObject,
-    pub binded_auth_value: Vec<u8>,
+    pub bound_auth_value: Vec<u8>,
     pub entity_auth_value: Vec<u8>,
 }
 
@@ -49,7 +49,7 @@ impl TpmSession {
             attributes,
             bind,
             tpm_key,
-            binded_auth_value: vec![],
+            bound_auth_value: vec![],
             entity_auth_value: vec![],
         }
     }
@@ -74,13 +74,13 @@ impl TpmSession {
         self.rotate_nonce();
     }
 
-    pub fn set_binded_auth_value(&mut self, auth_value: &[u8]) {
+    pub fn set_bound_auth_value(&mut self, auth_value: &[u8]) {
         self.entity_auth_value = auth_value.clone().to_vec();
-        self.binded_auth_value = auth_value.clone().to_vec();
+        self.bound_auth_value = auth_value.clone().to_vec();
     }
 
-    pub fn get_binded_auth_value(&self) -> Vec<u8> {
-        self.binded_auth_value.clone()
+    pub fn get_bound_auth_value(&self) -> Vec<u8> {
+        self.bound_auth_value.clone()
     }
 
     pub fn set_entity_auth_value(&mut self, auth_value: &[u8]) {
@@ -125,7 +125,7 @@ impl TpmSession {
         .concat();
         let session_key = [
             self.generate_session_key(vec![], bits),
-            if self.binded_auth_value != self.entity_auth_value {
+            if self.bound_auth_value != self.entity_auth_value {
                 self.entity_auth_value.clone()
             } else {
                 vec![]
@@ -145,7 +145,7 @@ impl TpmSession {
             if self.bind == TpmiDhEntity::Null {
                 vec![]
             } else {
-                self.binded_auth_value.clone()
+                self.bound_auth_value.clone()
             },
             if self.tpm_key == TpmiDhObject::Null {
                 vec![]

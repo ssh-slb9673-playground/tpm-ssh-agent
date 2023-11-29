@@ -45,6 +45,7 @@ fn main() -> Result<()> {
         }
     }
 
+    // [Trusted Computing Platforms: TPM2.0 in Context] Section 10.6.2 Identities with Intermediate Privacy Risk, but Intermediate Complexity
     // 1. CLIENT: Generate Storage Root Key
     println!("Generate: SRK");
     let storage_root_key =
@@ -74,10 +75,11 @@ fn main() -> Result<()> {
     println!("Generate: EK");
     session.set_entity_auth_value(&[]);
     let endorsement_key = create_endorsement_key(&mut tpm, &mut session)?; // EK
-    let _ek_certificate = nv_read(&mut tpm, &mut session, 0x01c0000a)?; // EKcert
+    let ek_certificate = nv_read(&mut tpm, &mut session, 0x01c0000a)?; // EKcert
+    println!("EKcert: {:?}", ek_certificate);
 
     // 4. CLIENT => SERVER: (EKcert, EKpub, AKpub, AKname)
-    // 5. SERVER: Verify EKcert
+    // 5. SERVER: Verify EKcert (ignore currently)
     // 6. SERVER: Generate credential
     let credential = Tpm2BDigest::new("test credential data".as_bytes());
 
@@ -157,7 +159,7 @@ fn nv_read(tpm: &mut Tpm, session: &mut TpmSession, nv_index: TpmHandle) -> Resu
             &TpmiHandleNvAuth::Owner,
             &TpmiHandleNvIndex::NvIndex(nv_index),
             size.min(NV_BUFFER_MAX),
-            0,
+            res.len() as u16,
         )?;
         res.extend(data);
         if size < NV_BUFFER_MAX {
