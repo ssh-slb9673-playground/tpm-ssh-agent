@@ -14,6 +14,7 @@ pub enum TpmError {
     UnsuccessfulResponse(structure::TpmResponseCode),
     Parse(Backtrace, String),
     InvalidAlgorithmType(structure::TpmAlgorithmType, structure::TpmAlgorithmType),
+    IoError(std::io::Error),
     Busy,
     Unreadable,
     LocalityReq(u8),
@@ -39,6 +40,7 @@ impl std::fmt::Display for TpmError {
                     expected, actual
                 )
             }
+            TpmError::IoError(io) => write!(f, "I/O Error: io = {:?}", io),
             TpmError::Busy => write!(f, "TPM Busy"),
             TpmError::Unreadable => write!(f, "TPM Unreadable"),
             TpmError::LocalityReq(n) => write!(f, "Can't get control of locality {}", n),
@@ -51,6 +53,12 @@ impl std::error::Error for TpmError {}
 impl std::convert::From<TpmError> for Error {
     fn from(err: TpmError) -> Error {
         Error::TpmError(err)
+    }
+}
+
+impl std::convert::From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error {
+        TpmError::IoError(err).into()
     }
 }
 

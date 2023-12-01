@@ -1,3 +1,4 @@
+pub mod chrdev;
 pub mod i2c;
 
 use crate::TpmResult;

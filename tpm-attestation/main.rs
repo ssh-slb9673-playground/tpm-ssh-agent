@@ -1,17 +1,19 @@
 #![allow(dead_code)]
 mod driver;
+mod endorsement_key;
 mod error;
 use rand::prelude::*;
 use tpm_i2c::tpm::commands::*;
 use tpm_i2c::tpm::session::TpmSession;
 use tpm_i2c::tpm::structure::*;
-use tpm_i2c::tpm::tcti::i2c::I2cTcti;
+use tpm_i2c::tpm::tcti::chrdev::ChrDevTcti;
 use tpm_i2c::tpm::Tpm;
 
 use crate::error::Result;
 
 fn main() -> Result<()> {
-    let tcti = I2cTcti::new(Box::new(driver::hidapi::MCP2221A::new(0x2e)?));
+    // let tcti = I2cTcti::new(Box::new(driver::hidapi::MCP2221A::new(0x2e)?));
+    let tcti = ChrDevTcti::new("/dev/tpm0")?;
     let mut tpm = Tpm::new(Box::new(tcti))?;
     if matches!(
         tpm.init(false),
@@ -76,8 +78,9 @@ fn main() -> Result<()> {
     // 3. CLIENT: Recover Endorsement Key
     println!("Generate: EK");
     session.set_entity_auth_value(&[]);
-    let endorsement_key = create_endorsement_key(&mut tpm, &mut session)?; // EK
-    let ek_certificate = nv_read(&mut tpm, &mut session, 0x01c0000a)?; // EKcert
+    let ektype = endorsement_key::decide_key_type(&mut tpm)?;
+    let endorsement_key = ektype.create_endorsement_key(&mut tpm, &mut session)?;
+    let ek_certificate = ektype.get_certificate(&mut tpm, &mut session)?;
     println!("EKcert: {:?}", ek_certificate);
 
     // 4. CLIENT => SERVER: (EKcert, EKpub, AKpub, AKname)
