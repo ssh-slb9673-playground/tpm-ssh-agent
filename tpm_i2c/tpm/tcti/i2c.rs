@@ -1,4 +1,5 @@
-use crate::tpm::{I2CTpmAccessor, Tcti, Tpm, TpmError};
+use crate::tpm::tcti::Tcti;
+use crate::tpm::TpmError;
 use crate::util::{p32le, u16le, u32le};
 use crate::TpmResult;
 use bitfield_struct::bitfield;
@@ -58,6 +59,12 @@ pub struct TpmInterfaceCaps {
     pub burst_count_static: bool,
     pub guard_time_repeated_start: bool,
     _reserved: bool,
+}
+
+pub trait I2CTpmAccessor: Sync + Send {
+    fn initialize(&mut self) -> TpmResult<()>;
+    fn i2c_read(&mut self, read_buf: &mut [u8]) -> TpmResult<()>;
+    fn i2c_write(&mut self, write_buf: &[u8]) -> TpmResult<()>;
 }
 
 pub struct I2cTcti {

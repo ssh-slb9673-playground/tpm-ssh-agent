@@ -4,7 +4,8 @@ use rand::prelude::*;
 use std::path::PathBuf;
 use tpm_i2c::tpm::commands::Tpm2CreateParameters;
 use tpm_i2c::tpm::structure::*;
-use tpm_i2c::tpm::{I2CTpmAccessor, Tpm};
+use tpm_i2c::tpm::tcti::Tcti;
+use tpm_i2c::tpm::Tpm;
 
 #[derive(Debug)]
 pub struct RsaPublicKey {
@@ -33,8 +34,8 @@ fn next_nonce() -> [u8; 16] {
 }
 
 impl TpmKeyManager {
-    pub fn new(state_file_path: PathBuf, device: Box<dyn I2CTpmAccessor>) -> Result<TpmKeyManager> {
-        let mut tpm = Tpm::new_i2c(device)?;
+    pub fn new(state_file_path: PathBuf, device: Box<dyn Tcti>) -> Result<TpmKeyManager> {
+        let mut tpm = Tpm::new(device)?;
         if let Err(tpm_i2c::Error::TpmError(tpm_i2c::tpm::TpmError::UnsuccessfulResponse(
             TpmResponseCode::ErrorForParam((_, TpmResponseCodeFormat1::Value)),
         ))) = tpm.init(false)

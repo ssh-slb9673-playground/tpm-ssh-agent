@@ -5,9 +5,9 @@ use structure::{Tpm2Command, TpmResponseCode, TpmResponseCodeFormat0, TpmiYesNo}
 
 pub mod commands;
 mod crypto;
-mod i2c;
 pub mod session;
 pub mod structure;
+pub mod tcti;
 
 #[derive(Debug)]
 pub enum TpmError {
@@ -66,29 +66,14 @@ pub trait FromTpmWithSelector<T>: std::fmt::Debug + Sized {
     fn from_tpm<'a>(v: &'a [u8], selector: &T) -> TpmResult<(Self, &'a [u8])>;
 }
 
-pub trait I2CTpmAccessor: Sync + Send {
-    fn initialize(&mut self) -> TpmResult<()>;
-    fn i2c_read(&mut self, read_buf: &mut [u8]) -> TpmResult<()>;
-    fn i2c_write(&mut self, write_buf: &[u8]) -> TpmResult<()>;
-}
-
-pub trait Tcti: Sync + Send {
-    fn device_init(&mut self) -> TpmResult<()>;
-    fn recv(&mut self) -> TpmResult<Vec<u8>>;
-    fn send(&mut self, data: &[u8]) -> TpmResult<()>;
-}
-
 pub struct Tpm {
-    device: Box<dyn Tcti>,
+    device: Box<dyn tcti::Tcti>,
 }
 
 impl Tpm {
-    pub fn new_i2c(device: Box<dyn I2CTpmAccessor>) -> TpmResult<Tpm> {
-        let mut tcti = i2c::I2cTcti::new(device);
-        tcti.device_init()?;
-        Ok(Tpm {
-            device: Box::new(tcti),
-        })
+    pub fn new(mut device: Box<dyn tcti::Tcti>) -> TpmResult<Tpm> {
+        device.device_init()?;
+        Ok(Tpm { device })
     }
 
     pub(in crate::tpm) fn execute(

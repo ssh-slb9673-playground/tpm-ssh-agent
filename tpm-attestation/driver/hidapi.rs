@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
-use tpm_i2c::tpm::I2CTpmAccessor;
+use tpm_i2c::tpm::tcti::i2c::I2CTpmAccessor;
 use tpm_i2c::{Error, TpmResult};
 
 pub struct MCP2221A {

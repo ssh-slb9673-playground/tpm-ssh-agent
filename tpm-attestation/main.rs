@@ -5,12 +5,14 @@ use rand::prelude::*;
 use tpm_i2c::tpm::commands::*;
 use tpm_i2c::tpm::session::TpmSession;
 use tpm_i2c::tpm::structure::*;
+use tpm_i2c::tpm::tcti::i2c::I2cTcti;
 use tpm_i2c::tpm::Tpm;
 
 use crate::error::Result;
 
 fn main() -> Result<()> {
-    let mut tpm = Tpm::new_i2c(Box::new(driver::hidapi::MCP2221A::new(0x2e)?))?;
+    let tcti = I2cTcti::new(Box::new(driver::hidapi::MCP2221A::new(0x2e)?));
+    let mut tpm = Tpm::new(Box::new(tcti))?;
     if matches!(
         tpm.init(false),
         Err(tpm_i2c::Error::TpmError(

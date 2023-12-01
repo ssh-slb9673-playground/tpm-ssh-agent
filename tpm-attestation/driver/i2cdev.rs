@@ -1,6 +1,6 @@
 use i2cdev::core::*;
 use i2cdev::linux::LinuxI2CDevice;
-use tpm_i2c::tpm::I2CTpmAccessor;
+use tpm_i2c::tpm::tcti::i2c::I2CTpmAccessor;
 use tpm_i2c::TpmResult;
 
 pub struct I2CDev {
