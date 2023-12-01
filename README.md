@@ -5,13 +5,13 @@ tpm-ssh-agent / tpm\_i2c / more
 A SSH agent implementation using TPM-stored ~~RSA-2048 key~~ secp256r1 ECDSA key
 
 ## tpm-attestation
-An implementation of Remote Attestation Protocol
+An implementation of 1-RTT Remote Attestation Protocol
 
 ## tpm\_i2c
-An implementation of TCTI / TPM API over I2C that used internally at tpm-ssh-agent
+An implementation of TCTI / TPM API over I2C that used internally at above projects
 
 ## schematics
-These projects are designed to run specifically on my self-developed USB-TPM dongle. It's possible to modify them to be compatible with fTPM / sTPM / vTPM, but it will require creating a TCTI module for that purpose.
+These projects are designed to run specifically on my self-developed USB-TPM dongle. It's possible to modify them to be compatible with fTPM, sTPM, vTPM, and more, but it will require creating a TCTI module for that purpose.
 
 You can find the schematics for the dongle here: [/usb_tpm_dongle_schematic.pdf](/usb_tpm_dongle_schematic.pdf).
 

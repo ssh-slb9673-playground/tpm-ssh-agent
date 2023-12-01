@@ -34,7 +34,7 @@ fn next_nonce() -> [u8; 16] {
 
 impl TpmKeyManager {
     pub fn new(state_file_path: PathBuf, device: Box<dyn I2CTpmAccessor>) -> Result<TpmKeyManager> {
-        let mut tpm = Tpm::new(device)?;
+        let mut tpm = Tpm::new_i2c(device)?;
         if let Err(tpm_i2c::Error::TpmError(tpm_i2c::tpm::TpmError::UnsuccessfulResponse(
             TpmResponseCode::ErrorForParam((_, TpmResponseCodeFormat1::Value)),
         ))) = tpm.init(false)
@@ -55,7 +55,7 @@ impl TpmKeyManager {
             Ok,
         )?;
 
-        tpm.print_info()?;
+        // tpm.print_info()?;
 
         Ok(TpmKeyManager {
             state_file_path,

@@ -72,20 +72,22 @@ pub trait I2CTpmAccessor: Sync + Send {
     fn i2c_write(&mut self, write_buf: &[u8]) -> TpmResult<()>;
 }
 
+pub trait Tcti: Sync + Send {
+    fn device_init(&mut self) -> TpmResult<()>;
+    fn recv(&mut self) -> TpmResult<Vec<u8>>;
+    fn send(&mut self, data: &[u8]) -> TpmResult<()>;
+}
+
 pub struct Tpm {
-    device: Box<dyn I2CTpmAccessor>,
-    current_locality: u8,
+    device: Box<dyn Tcti>,
 }
 
 impl Tpm {
-    pub fn new(mut device: Box<dyn I2CTpmAccessor>) -> TpmResult<Tpm> {
-        let mut read_buf = [0u8; 1];
-        device.initialize()?;
-        device.i2c_write(&[0x00])?;
-        device.i2c_read(&mut read_buf)?;
+    pub fn new_i2c(device: Box<dyn I2CTpmAccessor>) -> TpmResult<Tpm> {
+        let mut tcti = i2c::I2cTcti::new(device);
+        tcti.device_init()?;
         Ok(Tpm {
-            device,
-            current_locality: read_buf[0],
+            device: Box::new(tcti),
         })
     }
 
@@ -101,40 +103,28 @@ impl Tpm {
         cmd: &Tpm2Command,
         count_handles: usize,
     ) -> TpmResult<structure::Tpm2Response> {
-        use std::thread::sleep;
-        use std::time::Duration;
-        self.request_locality(0)?;
-        self.write_fifo(cmd.to_tpm().as_slice())?;
-        sleep(Duration::from_millis(5));
-        self.write_status(&i2c::TpmStatus::new().with_tpm_go(true))?;
+        self.device.send(&cmd.to_tpm())?;
         structure::Tpm2Response::from_tpm(
-            self.read_fifo()?.as_slice(),
+            self.device.recv()?.as_slice(),
             count_handles,
             &cmd.command_code,
         )
     }
 
     pub fn init(&mut self, clear_state: bool) -> TpmResult<()> {
-        let (tpm_vendor_id, tpm_device_id, tpm_revision_id) = self.read_identifiers()?;
-        // For Infineon SLB9673 only
-        assert_eq!(tpm_vendor_id, 0x15d1);
-        assert_eq!(tpm_device_id, 0x001c);
-        assert_eq!(tpm_revision_id, 0x16);
-        if !self.request_locality(0)? {
-            return Err(TpmError::LocalityReq(0).into());
-        }
         let res = self.startup(clear_state);
-        if let Err(Error::TpmError(TpmError::UnsuccessfulResponse(TpmResponseCode::Error(
-            TpmResponseCodeFormat0::Initialize,
-        )))) = res
-        {
+        if matches!(
+            res,
+            Err(Error::TpmError(TpmError::UnsuccessfulResponse(
+                TpmResponseCode::Error(TpmResponseCodeFormat0::Initialize)
+            )))
+        ) {
             println!("[*] TPM was already initialized");
         } else if res.is_err() {
             return res;
         } else {
             self.selftest(TpmiYesNo::No)?;
         }
-        self.release_locality()?;
         Ok(())
     }
 }

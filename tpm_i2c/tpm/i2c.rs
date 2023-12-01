@@ -1,4 +1,4 @@
-use crate::tpm::Tpm;
+use crate::tpm::{I2CTpmAccessor, Tcti, Tpm, TpmError};
 use crate::util::{p32le, u16le, u32le};
 use crate::TpmResult;
 use bitfield_struct::bitfield;
@@ -60,15 +60,27 @@ pub struct TpmInterfaceCaps {
     _reserved: bool,
 }
 
-impl Tpm {
+pub struct I2cTcti {
+    accessor: Box<dyn I2CTpmAccessor>,
+    current_locality: u8,
+}
+
+impl I2cTcti {
+    pub fn new(accessor: Box<dyn I2CTpmAccessor>) -> I2cTcti {
+        I2cTcti {
+            accessor,
+            current_locality: 0,
+        }
+    }
+
     pub(in crate::tpm) fn read_identifiers(&mut self) -> TpmResult<(u16, u16, u8)> {
         let mut read_vid_and_did_buf = [0u8; 4];
         let mut read_rid_buf = [0u8; 1];
 
-        self.device.i2c_write(&[0x48])?;
-        self.device.i2c_read(&mut read_vid_and_did_buf)?;
-        self.device.i2c_write(&[0x4c])?;
-        self.device.i2c_read(&mut read_rid_buf)?;
+        self.accessor.i2c_write(&[0x48])?;
+        self.accessor.i2c_read(&mut read_vid_and_did_buf)?;
+        self.accessor.i2c_write(&[0x4c])?;
+        self.accessor.i2c_read(&mut read_rid_buf)?;
 
         let (tpm_vendor_id, tpm_device_id) = {
             (
@@ -85,9 +97,9 @@ impl Tpm {
     pub(in crate::tpm) fn read_capabilities(&mut self) -> TpmResult<TpmInterfaceCaps> {
         let mut read_cap_buf = [0u8; 4];
         self.write_locality(self.current_locality)?;
-        self.device.i2c_write(&[0x30])?;
+        self.accessor.i2c_write(&[0x30])?;
         sleep(Duration::from_millis(5));
-        self.device.i2c_read(&mut read_cap_buf)?;
+        self.accessor.i2c_read(&mut read_cap_buf)?;
         Ok(TpmInterfaceCaps::from(u32le(&read_cap_buf)))
     }
 
@@ -98,16 +110,16 @@ impl Tpm {
     ) -> TpmResult<()> {
         let v: u8 = (*access).into();
         self.write_locality(loc)?;
-        self.device.i2c_write(&[0x04, v])?;
+        self.accessor.i2c_write(&[0x04, v])?;
         Ok(())
     }
 
     pub(in crate::tpm) fn read_access_for_locality(&mut self, loc: u8) -> TpmResult<TpmAccess> {
         let mut read_buf = [0u8; 1];
         self.write_locality(loc)?;
-        self.device.i2c_write(&[0x04])?;
+        self.accessor.i2c_write(&[0x04])?;
         sleep(Duration::from_millis(5));
-        self.device.i2c_read(&mut read_buf)?;
+        self.accessor.i2c_read(&mut read_buf)?;
         Ok(TpmAccess::from(read_buf[0]))
     }
 
@@ -122,9 +134,9 @@ impl Tpm {
     pub(in crate::tpm) fn read_status(&mut self) -> TpmResult<TpmStatus> {
         let mut read_sts_buf = [0u8; 4];
         self.write_locality(self.current_locality)?;
-        self.device.i2c_write(&[0x18])?;
+        self.accessor.i2c_write(&[0x18])?;
         sleep(Duration::from_millis(5));
-        self.device.i2c_read(&mut read_sts_buf)?;
+        self.accessor.i2c_read(&mut read_sts_buf)?;
         Ok(TpmStatus::from(u32le(&read_sts_buf)))
     }
 
@@ -132,48 +144,8 @@ impl Tpm {
         let x: u32 = (*status).into();
         let v = p32le(x);
         self.write_locality(self.current_locality)?;
-        self.device.i2c_write(&[0x18, v[0], v[1], v[2], v[3]])?;
+        self.accessor.i2c_write(&[0x18, v[0], v[1], v[2], v[3]])?;
         Ok(())
-    }
-
-    pub(in crate::tpm) fn write_fifo(&mut self, data: &[u8]) -> TpmResult<()> {
-        self.write_status(&TpmStatus::new().with_command_ready(true))?;
-        self.wait_command_ready()?;
-        self.write_locality(self.current_locality)?;
-        let mut remain = data.clone();
-        loop {
-            let burst_count = self.read_status()?.burst_count() as usize;
-            if burst_count >= 0x8000 {
-                continue;
-            }
-            let write_len = remain.len().min(burst_count);
-            self.device
-                .i2c_write(&[[0x24].to_vec(), remain[0..write_len].to_vec()].concat())?;
-            if write_len == remain.len() {
-                break;
-            }
-            remain = &remain[write_len..];
-        }
-        loop {
-            self.wait_status_valid()?;
-            if !self.read_status()?.expect() {
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    pub(in crate::tpm) fn read_fifo(&mut self) -> TpmResult<Vec<u8>> {
-        self.wait_data()?;
-        let n = self.read_status()?.burst_count() as usize;
-        let mut v = vec![0u8; n];
-
-        self.write_locality(self.current_locality)?;
-        self.device.i2c_write(&[0x24u8])?;
-        sleep(Duration::from_millis(5));
-        self.device.i2c_read(&mut v)?;
-
-        Ok(v)
     }
 
     pub(in crate::tpm) fn wait_command_ready(&mut self) -> TpmResult<()> {
@@ -256,14 +228,14 @@ impl Tpm {
     #[allow(unused)]
     pub(in crate::tpm) fn read_locality(&mut self) -> TpmResult<u8> {
         let mut read_buf = [0u8; 1];
-        self.device.i2c_write(&[0x00])?;
+        self.accessor.i2c_write(&[0x00])?;
         sleep(Duration::from_millis(5));
-        self.device.i2c_read(&mut read_buf)?;
+        self.accessor.i2c_read(&mut read_buf)?;
         Ok(read_buf[0])
     }
 
     pub(in crate::tpm) fn write_locality(&mut self, locality: u8) -> TpmResult<()> {
-        self.device.i2c_write(&[0x00, locality])?;
+        self.accessor.i2c_write(&[0x00, locality])?;
         Ok(())
     }
 
@@ -346,6 +318,84 @@ impl Tpm {
             }
         );
 
+        Ok(())
+    }
+
+    fn write_fifo(&mut self, data: &[u8]) -> TpmResult<()> {
+        self.write_status(&TpmStatus::new().with_command_ready(true))?;
+        self.wait_command_ready()?;
+        self.write_locality(self.current_locality)?;
+        let mut remain = data.clone();
+        loop {
+            let burst_count = self.read_status()?.burst_count() as usize;
+            if burst_count >= 0x8000 {
+                continue;
+            }
+            let write_len = remain.len().min(burst_count);
+            self.accessor
+                .i2c_write(&[[0x24].to_vec(), remain[0..write_len].to_vec()].concat())?;
+            if write_len == remain.len() {
+                break;
+            }
+            remain = &remain[write_len..];
+        }
+        loop {
+            self.wait_status_valid()?;
+            if !self.read_status()?.expect() {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    fn read_fifo(&mut self) -> TpmResult<Vec<u8>> {
+        self.wait_data()?;
+        let n = self.read_status()?.burst_count() as usize;
+        let mut v = vec![0u8; n];
+
+        self.write_locality(self.current_locality)?;
+        self.accessor.i2c_write(&[0x24u8])?;
+        sleep(Duration::from_millis(5));
+        self.accessor.i2c_read(&mut v)?;
+
+        Ok(v)
+    }
+}
+
+impl Tcti for I2cTcti {
+    fn device_init(&mut self) -> TpmResult<()> {
+        let mut read_buf = [0u8; 1];
+        self.accessor.initialize()?;
+        self.accessor.i2c_write(&[0x00])?;
+        self.accessor.i2c_read(&mut read_buf)?;
+        self.current_locality = read_buf[0];
+
+        let (tpm_vendor_id, tpm_device_id, tpm_revision_id) = self.read_identifiers()?;
+        // For Infineon SLB9673 only
+        assert_eq!(tpm_vendor_id, 0x15d1);
+        assert_eq!(tpm_device_id, 0x001c);
+        assert_eq!(tpm_revision_id, 0x16);
+
+        if !self.request_locality(0)? {
+            return Err(TpmError::LocalityReq(0).into());
+        }
+
+        Ok(())
+    }
+
+    fn recv(&mut self) -> TpmResult<Vec<u8>> {
+        self.request_locality(0)?;
+        let res = self.read_fifo()?;
+        self.release_locality()?;
+        Ok(res)
+    }
+
+    fn send(&mut self, data: &[u8]) -> TpmResult<()> {
+        self.request_locality(0)?;
+        self.write_fifo(data)?;
+        sleep(Duration::from_millis(5));
+        self.write_status(&TpmStatus::new().with_tpm_go(true))?;
+        self.release_locality()?;
         Ok(())
     }
 }

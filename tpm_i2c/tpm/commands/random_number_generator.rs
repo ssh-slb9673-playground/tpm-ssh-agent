@@ -9,15 +9,11 @@ use crate::TpmResult;
 
 impl Tpm {
     pub fn get_random(&mut self, len: u16) -> TpmResult<Vec<u8>> {
-        if !self.request_locality(0)? {
-            return Err(TpmError::LocalityReq(0).into());
-        }
         let res = self.execute(&Tpm2Command::new(
             TpmStructureTag::NoSessions,
             Tpm2CommandCode::GetRandom,
             vec![Box::new(len)],
         ))?;
-        self.release_locality()?;
         if res.response_code != TpmResponseCode::Success {
             Err(TpmError::UnsuccessfulResponse(res.response_code).into())
         } else {

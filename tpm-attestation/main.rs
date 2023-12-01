@@ -10,7 +10,7 @@ use tpm_i2c::tpm::Tpm;
 use crate::error::Result;
 
 fn main() -> Result<()> {
-    let mut tpm = Tpm::new(Box::new(driver::hidapi::MCP2221A::new(0x2e)?))?;
+    let mut tpm = Tpm::new_i2c(Box::new(driver::hidapi::MCP2221A::new(0x2e)?))?;
     if matches!(
         tpm.init(false),
         Err(tpm_i2c::Error::TpmError(
@@ -27,7 +27,7 @@ fn main() -> Result<()> {
     remove_handles(&mut tpm, TpmHandleType::HmacOrLoadedSession)?;
     remove_handles(&mut tpm, TpmHandleType::Transient)?;
 
-    tpm.print_info()?;
+    // tpm.print_info()?;
     let mut session = open_session(&mut tpm)?;
     println!("Session Opened: {:08x}", session.handle);
     println!("[+] NV indexes:");
