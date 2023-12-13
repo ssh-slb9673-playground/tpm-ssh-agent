@@ -7,14 +7,20 @@ use tpm_i2c::tpm::commands::*;
 use tpm_i2c::tpm::session::TpmSession;
 use tpm_i2c::tpm::structure::*;
 use tpm_i2c::tpm::tcti::chrdev::ChrDevTcti;
+use tpm_i2c::tpm::tcti::i2c::I2cTcti;
+use tpm_i2c::tpm::tcti::Tcti;
 use tpm_i2c::tpm::Tpm;
 
 use crate::error::Result;
 
 fn main() -> Result<()> {
-    // let tcti = I2cTcti::new(Box::new(driver::hidapi::MCP2221A::new(0x2e)?));
-    let tcti = ChrDevTcti::new("/dev/tpm0")?;
-    let mut tpm = Tpm::new(Box::new(tcti))?;
+    let use_real_tpm = true;
+    let tcti: Box<dyn Tcti> = if use_real_tpm {
+        Box::new(I2cTcti::new(Box::new(driver::hidapi::MCP2221A::new(0x2e)?)))
+    } else {
+        Box::new(ChrDevTcti::new("/dev/tpm0")?)
+    };
+    let mut tpm = Tpm::new(tcti)?;
     if matches!(
         tpm.init(false),
         Err(tpm_i2c::Error::TpmError(

@@ -11,7 +11,7 @@ An implementation of 1-RTT Remote Attestation Protocol
 An implementation of TCTI / TPM API over I2C that used internally at above projects
 
 ## schematics
-These projects are designed to run specifically on my self-developed USB-TPM dongle. It's possible to modify them to be compatible with fTPM, sTPM, vTPM, and more, but it will require creating a TCTI module for that purpose.
+I initially wrote this code exclusively for my developed USB-TPM dongle. However, the `tpm_i2c` now includes a TCTI implementation for the TPM via a character device (e.g., `/dev/tpm0`). Consequently, by appropriately selecting the TCTI, you can make these projects work.
 
 You can find the schematics for the dongle here: [/usb_tpm_dongle_schematic.pdf](/usb_tpm_dongle_schematic.pdf).
 
