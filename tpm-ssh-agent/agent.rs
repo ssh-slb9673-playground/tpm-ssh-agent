@@ -15,8 +15,8 @@ impl Agent for TpmSshAgent {
     type Error = ();
 
     fn handle(&self, message: Message) -> std::result::Result<Message, ()> {
-        let res = self.handle_message(message).or(Ok(Message::Failure));
-        res
+        
+        self.handle_message(message).or(Ok(Message::Failure))
     }
 }
 

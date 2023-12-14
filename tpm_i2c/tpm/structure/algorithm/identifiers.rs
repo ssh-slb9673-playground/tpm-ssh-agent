@@ -257,8 +257,7 @@ impl TpmAlgorithm for TpmAlgorithmIdentifier {
                 CBC => vec![Symmetric, Encryption],
                 CFB => vec![Symmetric, Encryption],
                 ECB => vec![Symmetric, Encryption],
-            }
-            .into_iter(),
+            },
         )
     }
 }
@@ -375,7 +374,6 @@ mod test {
             + Into<TpmAlgorithmIdentifier>,
     {
         all::<T>()
-            .into_iter()
             .map(|x| x.into())
             .filter(|x| &x.get_type() == target && x.to_u32().unwrap() != 0x10)
             .collect::<HashSet<_>>()
@@ -391,7 +389,6 @@ mod test {
             + Into<TpmAlgorithmIdentifier>,
     {
         all::<T>()
-            .into_iter()
             .map(|x| x.into())
             .filter(|x| target.is_subset(&x.get_type()) && x.to_u32().unwrap() != 0x10)
             .collect::<HashSet<_>>()
@@ -411,8 +408,7 @@ mod test {
         assert_eq!(
             to_set::<T>(),
             extract_equal::<TpmAlgorithmIdentifier>(target)
-                .union(&except)
-                .map(|x| *x)
+                .union(except).copied()
                 .collect::<HashSet<_>>()
         );
     }
@@ -511,8 +507,7 @@ mod test {
 
         let extracted: HashSet<TpmAlgorithmIdentifier> =
             extract_equal::<TpmAlgorithmIdentifier>(&target1)
-                .union(&extract_equal::<TpmAlgorithmIdentifier>(&target2))
-                .map(|x| *x)
+                .union(&extract_equal::<TpmAlgorithmIdentifier>(&target2)).copied()
                 .collect();
 
         assert_eq!(
@@ -528,8 +523,7 @@ mod test {
 
         let extracted: HashSet<TpmAlgorithmIdentifier> =
             extract_equal::<TpmAlgorithmIdentifier>(&target1)
-                .union(&extract_equal::<TpmAlgorithmIdentifier>(&target2))
-                .map(|x| *x)
+                .union(&extract_equal::<TpmAlgorithmIdentifier>(&target2)).copied()
                 .collect();
 
         assert_eq!(
@@ -546,8 +540,7 @@ mod test {
                 TpmAlgorithmType::Asymmetric,
                 TpmAlgorithmType::Signing,
             ]))
-            .union(&HashSet::from([TpmAlgorithmIdentifier::Hmac]))
-            .map(|x| *x)
+            .union(&HashSet::from([TpmAlgorithmIdentifier::Hmac])).copied()
             .collect::<HashSet<_>>()
         );
     }
@@ -570,11 +563,9 @@ mod test {
 
         let extracted: HashSet<TpmAlgorithmIdentifier> =
             extract_least::<TpmAlgorithmIdentifier>(&target1)
-                .union(&extract_least::<TpmAlgorithmIdentifier>(&target2))
-                .map(|x| *x)
+                .union(&extract_least::<TpmAlgorithmIdentifier>(&target2)).copied()
                 .collect::<HashSet<_>>()
-                .union(&extract_least::<TpmAlgorithmIdentifier>(&target3))
-                .map(|x| *x)
+                .union(&extract_least::<TpmAlgorithmIdentifier>(&target3)).copied()
                 .collect();
 
         assert_eq!(

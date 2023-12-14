@@ -96,7 +96,7 @@ impl_from_tpm! {
     }
 
     TpmsPcrSelection(_v) {
-        let mut v = _v.clone();
+        let mut v = _v;
         let (algorithm_hash, tmp) = TpmiAlgorithmHash::from_tpm(v)?;
         v = tmp;
         let (count, tmp) = u8::from_tpm(v)?;
@@ -115,7 +115,7 @@ impl_from_tpm! {
     }
 
     TpmlPcrSelection(_v) {
-        let mut v = _v.clone();
+        let mut v = _v;
         let (count, tmp) = u32::from_tpm(v)?;
         v = tmp;
         let mut pcr_selections = vec![];
@@ -131,7 +131,7 @@ impl_from_tpm! {
     }
 
     TpmlHandle(_v) {
-        let mut v = _v.clone();
+        let mut v = _v;
         let (count, tmp) = u32::from_tpm(v)?;
         v = tmp;
         let mut handle = vec![];

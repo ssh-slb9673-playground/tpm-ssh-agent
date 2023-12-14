@@ -75,8 +75,8 @@ impl TpmSession {
     }
 
     pub fn set_bound_auth_value(&mut self, auth_value: &[u8]) {
-        self.entity_auth_value = auth_value.clone().to_vec();
-        self.bound_auth_value = auth_value.clone().to_vec();
+        self.entity_auth_value = auth_value.to_vec();
+        self.bound_auth_value = auth_value.to_vec();
     }
 
     pub fn get_bound_auth_value(&self) -> Vec<u8> {
@@ -84,7 +84,7 @@ impl TpmSession {
     }
 
     pub fn set_entity_auth_value(&mut self, auth_value: &[u8]) {
-        self.entity_auth_value = auth_value.clone().to_vec();
+        self.entity_auth_value = auth_value.to_vec();
     }
 
     pub fn get_entity_auth_value(&self) -> Vec<u8> {

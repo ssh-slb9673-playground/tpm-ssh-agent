@@ -332,7 +332,7 @@ impl I2cTcti {
         self.write_status(&TpmStatus::new().with_command_ready(true))?;
         self.wait_command_ready()?;
         self.write_locality(self.current_locality)?;
-        let mut remain = data.clone();
+        let mut remain = data;
         loop {
             let burst_count = self.read_status()?.burst_count() as usize;
             if burst_count >= 0x8000 {

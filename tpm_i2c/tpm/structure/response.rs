@@ -207,7 +207,7 @@ impl Tpm2Response {
         handles_count: usize,
         command_code: &Tpm2CommandCode,
     ) -> TpmResult<Tpm2Response> {
-        let mut v = _v.clone();
+        let mut v = _v;
         let mut rphash_raw = vec![];
 
         // len(v) must be larger than len(tag + response_size + response_code)
